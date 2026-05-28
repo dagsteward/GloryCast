@@ -6,7 +6,9 @@
       "Bash(mkdir -p \"D:\\\\PROJECTS\\\\GloryCast\\\\.claude\")",
       "mcp__Claude_Preview__preview_start",
       "Bash(git config *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(git add *)"
     ]
   }
 }
