@@ -35,6 +35,13 @@ export interface UpcomingService {
   speakerName?: string
 }
 
+export interface SavedSong {
+  id:         string
+  title:      string
+  rawText:    string
+  uploadedAt: string  // ISO
+}
+
 interface AppState {
   // Church / user identity
   church: ChurchProfile
@@ -63,6 +70,9 @@ interface AppState {
   upcomingService: UpcomingService | null
   lastServiceDate: string | null
 
+  // Song library (persisted)
+  songLibrary: SavedSong[]
+
   // UI
   aiPanelOpen:      boolean
   connectionStatus: 'connected' | 'disconnected' | 'connecting'
@@ -84,6 +94,8 @@ interface AppState {
   addDetectedScripture: (reference: string) => void
   setUpcomingService: (s: UpcomingService | null) => void
   setLastServiceDate: (d: string | null) => void
+  saveSong: (song: Omit<SavedSong, 'id' | 'uploadedAt'>) => void
+  deleteSong: (id: string) => void
   toggleAiPanel: () => void
   setConnectionStatus: (s: AppState['connectionStatus']) => void
   resetStream: () => void
@@ -142,6 +154,9 @@ export const useAppStore = create<AppState>()(
         },
         lastServiceDate: new Date(Date.now() - 7 * 86400000).toISOString(),
 
+        // Song library
+        songLibrary: [],
+
         // UI
         aiPanelOpen:      false,
         connectionStatus: 'disconnected',
@@ -170,6 +185,13 @@ export const useAppStore = create<AppState>()(
         })),
         setUpcomingService: (s) => set({ upcomingService: s }),
         setLastServiceDate: (d) => set({ lastServiceDate: d }),
+        saveSong: ({ title, rawText }) => set(s => ({
+          songLibrary: [
+            { id: `song-lib-${Date.now()}`, title, rawText, uploadedAt: new Date().toISOString() },
+            ...s.songLibrary.filter(x => x.title !== title),  // deduplicate by title
+          ],
+        })),
+        deleteSong: (id) => set(s => ({ songLibrary: s.songLibrary.filter(x => x.id !== id) })),
         toggleAiPanel: () => set(s => ({ aiPanelOpen: !s.aiPanelOpen })),
         setConnectionStatus: (status) => set({ connectionStatus: status }),
         resetStream: () => set({
@@ -190,6 +212,7 @@ export const useAppStore = create<AppState>()(
           destinations: s.destinations,
           upcomingService: s.upcomingService,
           lastServiceDate: s.lastServiceDate,
+          songLibrary: s.songLibrary,
         }),
       },
     ),
