@@ -11,7 +11,10 @@
       "Bash(git add *)",
       "Bash(npx tsc *)",
       "Bash(npx --yes tsc --version)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)",
+      "PowerShell(cd D:\\\\PROJECTS\\\\GloryCast\\\\apps\\\\desktop && npx vite --port 5173 2>&1 &)",
+      "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c cd D:\\\\PROJECTS\\\\GloryCast\\\\apps\\\\desktop && npx vite --port 5173\" -WindowStyle Normal)",
+      "PowerShell(Test-NetConnection -ComputerName localhost -Port 5173 -InformationLevel Quiet 2>&1)"
     ]
   }
 }
