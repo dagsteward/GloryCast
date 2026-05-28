@@ -1,6 +1,18 @@
 {
   "name": "@glorycast/bible-engine",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "Advanced Bible engine for GloryCast AI — multi-translation, search, cross-references, Strong's, topical, playlists",
+  "type": "module",
   "main": "src/index.ts",
-  "types": "src/index.ts"
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "mdb-reader": "^2.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
 }
