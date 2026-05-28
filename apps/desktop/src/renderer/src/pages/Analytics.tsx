@@ -33,6 +33,30 @@ const LOCATION_DATA = [
 // Viewer timeline data for the selected service
 const TIMELINE_POINTS = [80, 160, 310, 620, 1050, 1480, 2100, 2500, 2637, 2580, 2420, 2200, 1950, 1700, 1400, 1100]
 
+function exportCSV(svc: typeof SERVICES[0]) {
+  const rows = [
+    ['Metric', 'Value'],
+    ['Service', svc.label],
+    ['Date', svc.date],
+    ['Online Viewers', svc.viewers],
+    ['In-Person', svc.inPerson],
+    ['Countries', svc.countries],
+    ['Avg Watch Time', svc.duration],
+    ['Engagement', `${svc.engagement}%`],
+    ['Chat Messages', svc.chat],
+    ...PLATFORM_STATS.map(p => [p.name, p.viewers]),
+    ...LOCATION_DATA.map(l => [l.country, l.count]),
+  ]
+  const csv = rows.map(r => r.join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `glorycast-analytics-${svc.date.replace(' ', '-')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function AnalyticsPage() {
   const { isStreaming } = useAppStore()
   const [selectedService, setSelectedService] = useState(0)
@@ -73,7 +97,10 @@ export function AnalyticsPage() {
               </select>
               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
             </div>
-            <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/50 hover:text-white/80 transition-colors">
+            <button
+              onClick={() => exportCSV(svc)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/50 hover:text-white/80 transition-colors"
+            >
               <Download size={12} />
               Export
             </button>

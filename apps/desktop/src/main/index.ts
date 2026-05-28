@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, shell, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, shell, Menu, session } from 'electron'
 import { join } from 'path'
 import { createMediaEngine } from './media-engine'
 import { createIPCHandlers } from './ipc-handlers'
@@ -100,6 +100,17 @@ function createStageDisplay(): BrowserWindow {
 
 async function bootstrap() {
   await app.whenReady()
+
+  // Grant camera, microphone, and screen-capture permissions automatically.
+  // Without this handler Electron denies all getUserMedia / getDisplayMedia calls.
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'display-capture', 'mediaKeySystem']
+    callback(allowed.includes(permission))
+  })
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowed = ['media', 'display-capture', 'mediaKeySystem']
+    return allowed.includes(permission)
+  })
 
   createIPCHandlers(store, windowManager)
   createMainWindow()

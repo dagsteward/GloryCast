@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Sparkles, FileText, Instagram, Newspaper, BookOpen,
@@ -29,6 +29,7 @@ export function AiStudioPage() {
   const [generatedContent, setGeneratedContent] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [tone, setTone] = useState<'formal' | 'conversational' | 'inspirational'>('conversational')
+  const importRef = useRef<HTMLInputElement>(null)
 
   const generate = async () => {
     setIsGenerating(true)
@@ -45,6 +46,25 @@ export function AiStudioPage() {
 
   const copy = () => {
     navigator.clipboard.writeText(generatedContent)
+  }
+
+  const exportContent = () => {
+    const blob = new Blob([generatedContent], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selectedType}-${new Date().toISOString().slice(0,10)}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => setTranscript((ev.target?.result as string) ?? '')
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   return (
@@ -125,10 +145,20 @@ export function AiStudioPage() {
                     <Mic2 size={10} />
                     Record
                   </button>
-                  <button className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-colors">
+                  <button
+                    onClick={() => importRef.current?.click()}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-colors"
+                  >
                     <Upload size={10} />
                     Import
                   </button>
+                  <input
+                    ref={importRef}
+                    type="file"
+                    accept=".txt,.md,.doc,.docx"
+                    className="hidden"
+                    onChange={handleImportFile}
+                  />
                 </div>
               </div>
               <textarea
@@ -183,7 +213,10 @@ export function AiStudioPage() {
                   <Copy size={11} />
                   Copy
                 </button>
-                <button className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-white/50 hover:text-white/80 hover:bg-white/[0.05] transition-colors">
+                <button
+                  onClick={exportContent}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-white/50 hover:text-white/80 hover:bg-white/[0.05] transition-colors"
+                >
                   <Download size={11} />
                   Export
                 </button>
