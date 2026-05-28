@@ -4,7 +4,9 @@
       "Bash(git init *)",
       "Bash(npm install *)",
       "Bash(mkdir -p \"D:\\\\PROJECTS\\\\GloryCast\\\\.claude\")",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git config *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
