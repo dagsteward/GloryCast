@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mic2, MicOff, Volume2, VolumeX, Settings2, Activity } from 'lucide-react'
+import { Mic2, MicOff, Activity } from 'lucide-react'
+import { useMediaEngine, getStream } from '../../hooks/useMediaEngine'
 import { cn } from '../../lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -7,31 +8,29 @@ import { cn } from '../../lib/utils'
 interface AudioChannel {
   id: string
   name: string
-  type: 'mic' | 'line' | 'virtual' | 'mix'
+  type: 'mic' | 'source' | 'line' | 'mix'
+  sourceId?: string
   level: number
   muted: boolean
   solo: boolean
   pan: number
   eq: { low: number; mid: number; high: number }
   peakLevel: number
-  realLevel?: number    // 0–100, filled in by Web Audio API when live
+  realLevel?: number
   isLive?: boolean
 }
 
-// ─── Initial channel layout ───────────────────────────────────────────────────
+// ─── Static channels (always present) ────────────────────────────────────────
 
-const INITIAL_CHANNELS: AudioChannel[] = [
-  { id: 'live-mic',     name: 'Live Mic',    type: 'mic',     level: 80, muted: false, solo: false, pan: 0,   eq: { low:0, mid:0, high:0 }, peakLevel: 0,  isLive: true  },
-  { id: 'worship-mic',  name: 'Worship',     type: 'mic',     level: 68, muted: false, solo: false, pan: -15, eq: { low:-2, mid:0, high:3 }, peakLevel: 65 },
-  { id: 'choir',        name: 'Choir',       type: 'mic',     level: 55, muted: false, solo: false, pan: 0,   eq: { low:0,  mid:0, high:0  }, peakLevel: 52 },
-  { id: 'keys',         name: 'Keys',        type: 'line',    level: 62, muted: false, solo: false, pan: 10,  eq: { low:1,  mid:-1, high:0  }, peakLevel: 60 },
-  { id: 'guitar',       name: 'Guitar',      type: 'line',    level: 58, muted: false, solo: false, pan: -20, eq: { low:-3, mid:2, high:1   }, peakLevel: 55 },
-  { id: 'drums',        name: 'Drums',       type: 'line',    level: 70, muted: false, solo: false, pan: 0,   eq: { low:3,  mid:0, high:-1  }, peakLevel: 72 },
-  { id: 'playback',     name: 'Playback',    type: 'virtual', level: 45, muted: false, solo: false, pan: 0,   eq: { low:0,  mid:0, high:0  }, peakLevel: 43 },
-  { id: 'stream-mix',   name: 'Stream Mix',  type: 'mix',     level: 85, muted: false, solo: false, pan: 0,   eq: { low:0,  mid:0, high:0  }, peakLevel: 83 },
+const STATIC_CHANNELS: AudioChannel[] = [
+  { id: 'live-mic',  name: 'Live Mic',   type: 'mic',  level: 80, muted: false, solo: false, pan: 0,   eq: { low: 0,  mid: 0, high: 0 },  peakLevel: 0,  isLive: true },
+  { id: 'music-bg',  name: 'Music/BG',   type: 'line', level: 55, muted: false, solo: false, pan: 0,   eq: { low: 2,  mid: 0, high: 0 },  peakLevel: 52 },
+  { id: 'sfx',       name: 'SFX',        type: 'line', level: 45, muted: false, solo: false, pan: 0,   eq: { low: 0,  mid: 0, high: 0 },  peakLevel: 43 },
+  { id: 'web-zoom',  name: 'Zoom/Web',   type: 'line', level: 65, muted: false, solo: false, pan: 0,   eq: { low: -1, mid: 0, high: 2 },  peakLevel: 60 },
+  { id: 'teams',     name: 'Teams',      type: 'line', level: 50, muted: false, solo: false, pan: 0,   eq: { low: -1, mid: 0, high: 1 },  peakLevel: 48 },
 ]
 
-// ─── Web Audio helpers ────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getRms(analyser: AnalyserNode): number {
   const buf = new Uint8Array(analyser.frequencyBinCount)
@@ -46,157 +45,153 @@ function getRms(analyser: AnalyserNode): number {
 
 // ─── VU Meter ─────────────────────────────────────────────────────────────────
 
-function VUMeter({ level, peak, color = 'emerald', isLive }: {
-  level: number; peak: number; color?: string; isLive?: boolean
+function VUMeter({ level, peak, isLive, compact }: {
+  level: number; peak: number; isLive?: boolean; compact?: boolean
 }) {
-  const pct    = Math.min(100, Math.max(0, level))
+  const pct     = Math.min(100, Math.max(0, level))
   const peakPct = Math.min(100, Math.max(0, peak))
+  const h       = compact ? 54 : 76
 
   const barColor =
     pct > 85 ? 'bg-red-500' :
     pct > 70 ? 'bg-yellow-400' :
-    isLive    ? 'bg-emerald-400' :
-                `bg-${color}-500`
+    isLive   ? 'bg-emerald-400' :
+               'bg-blue-400'
 
   return (
-    <div className="relative w-3 flex flex-col-reverse bg-white/[0.05] rounded-full overflow-hidden" style={{ height: '80px' }}>
-      {/* Level bar */}
-      <motion_div pct={pct} barColor={barColor} />
-      {/* Peak indicator */}
+    <div className="relative bg-white/[0.05] rounded-full overflow-hidden"
+      style={{ width: '10px', height: `${h}px` }}>
       <div
-        className="absolute w-full h-0.5 bg-white/80 transition-none"
-        style={{ bottom: `${peakPct}%` }}
+        className={cn('absolute bottom-0 w-full rounded-full transition-all duration-75', barColor)}
+        style={{ height: `${pct}%` }}
       />
-      {/* Live dot */}
+      <div className="absolute w-full h-px bg-white/60" style={{ bottom: `${peakPct}%` }} />
       {isLive && pct > 2 && (
-        <div className="absolute top-1 right-0 left-0 mx-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ width: '6px', margin: '0 auto' }} />
+        <div className="absolute top-1 left-0 right-0 mx-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+          style={{ width: '6px', margin: '0 auto' }} />
       )}
     </div>
   )
 }
 
-// Framer-motion-free animated bar (CSS transition)
-function motion_div({ pct, barColor }: { pct: number; barColor: string }) {
-  return (
-    <div
-      className={cn('w-full rounded-full transition-all duration-75', barColor)}
-      style={{ height: `${pct}%` }}
-    />
-  )
-}
+// ─── Vertical Fader ───────────────────────────────────────────────────────────
 
-// ─── Vertical fader ───────────────────────────────────────────────────────────
-
-function VerticalFader({ value, onChange, color = 'white' }: {
-  value: number; onChange: (v: number) => void; color?: string
+function VerticalFader({ value, onChange, compact, color = 'white' }: {
+  value: number; onChange: (v: number) => void; compact?: boolean; color?: string
 }) {
+  const h = compact ? 54 : 76
   return (
     <input
       type="range" min={0} max={100} value={value}
       onChange={e => onChange(Number(e.target.value))}
-      className="h-20 cursor-pointer"
+      className="cursor-pointer"
       style={{
         writingMode: 'vertical-lr' as const,
-        direction: 'rtl' as const,
-        appearance: 'slider-vertical',
-        width: '20px',
+        direction:   'rtl' as const,
+        appearance:  'slider-vertical',
+        width:  '18px',
+        height: `${h}px`,
         accentColor: color === 'purple' ? '#7c3aed' : '#fff',
       }}
     />
   )
 }
 
-// ─── EQ knob (small rotary) ───────────────────────────────────────────────────
+// ─── EQ Knob ─────────────────────────────────────────────────────────────────
 
 function EQKnob({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const deg = (value / 12) * 135
   return (
     <div
-      className="w-4 h-4 rounded-full bg-white/10 border border-white/20 flex items-center justify-center cursor-ns-resize relative"
+      className="w-4 h-4 rounded-full bg-white/10 border border-white/20 cursor-ns-resize relative flex items-center justify-center"
       title={`${value > 0 ? '+' : ''}${value} dB`}
       onPointerDown={e => {
         e.currentTarget.setPointerCapture(e.pointerId)
-        let startY = e.clientY, startV = value
-        const move = (me: PointerEvent) => {
-          const delta = Math.round((startY - me.clientY) / 5)
-          onChange(Math.max(-12, Math.min(12, startV + delta)))
-        }
+        const startY = e.clientY; const startV = value
+        const move = (me: PointerEvent) => onChange(Math.max(-12, Math.min(12, startV + Math.round((startY - me.clientY) / 5))))
         const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
         window.addEventListener('pointermove', move)
         window.addEventListener('pointerup', up)
       }}
     >
       <div
-        className="w-0.5 h-1.5 bg-white/60 rounded-full absolute bottom-1"
-        style={{ transform: `rotate(${deg}deg)`, transformOrigin: 'bottom center', bottom: '3px' }}
+        className="w-0.5 h-1.5 bg-white/60 rounded-full absolute"
+        style={{ bottom: '3px', transform: `rotate(${deg}deg)`, transformOrigin: 'bottom center' }}
       />
     </div>
   )
 }
 
-// ─── Channel strip ────────────────────────────────────────────────────────────
+// ─── Channel Strip ────────────────────────────────────────────────────────────
 
-function ChannelStrip({ channel, onUpdate }: {
+function ChannelStrip({ channel, onUpdate, compact }: {
   channel: AudioChannel
-  onUpdate: (updates: Partial<AudioChannel>) => void
+  onUpdate: (u: Partial<AudioChannel>) => void
+  compact?: boolean
 }) {
   const typeColor = {
-    mic:     'text-purple-400',
-    line:    'text-blue-400',
-    virtual: 'text-orange-400',
-    mix:     'text-emerald-400',
+    mic:    'text-purple-400',
+    source: 'text-emerald-400',
+    line:   'text-blue-400',
+    mix:    'text-amber-400',
   }[channel.type]
 
-  const displayLevel = channel.isLive && channel.realLevel !== undefined
-    ? (channel.muted ? 0 : channel.realLevel * (channel.level / 100))
-    : (channel.muted ? 0 : channel.level)
+  const displayLevel =
+    channel.muted ? 0 :
+    channel.isLive && channel.realLevel !== undefined
+      ? channel.realLevel * (channel.level / 100)
+      : channel.level
 
   return (
     <div className={cn(
-      'flex flex-col items-center border-r border-white/[0.05] py-3 px-2.5 min-w-[64px] transition-colors',
-      channel.solo && 'bg-yellow-500/5',
+      'flex flex-col items-center border-r border-white/[0.05] py-2 px-2 min-w-[58px] transition-colors',
+      channel.solo   && 'bg-yellow-500/5',
       channel.isLive && 'bg-emerald-500/[0.03]',
     )}>
-      {/* Name */}
-      <span className="text-[9px] text-white/50 mb-0.5 text-center leading-tight truncate w-full">{channel.name}</span>
-      <span className={cn('text-[7px] uppercase tracking-wide mb-2', typeColor)}>
+      {/* Name + type */}
+      <span className="text-[8px] text-white/50 mb-0.5 text-center truncate w-full leading-tight">{channel.name}</span>
+      <span className={cn('text-[7px] uppercase tracking-wide mb-1', typeColor)}>
         {channel.isLive ? '● LIVE' : channel.type}
       </span>
 
-      {/* EQ */}
-      <div className="flex flex-col gap-1 mb-2">
-        {(['high','mid','low'] as const).map(band => (
-          <div key={band} className="flex items-center gap-1">
-            <span className="text-[7px] text-white/25 w-4 text-right uppercase">{band[0]}</span>
-            <EQKnob value={channel.eq[band]} onChange={v => onUpdate({ eq: { ...channel.eq, [band]: v } })} />
-          </div>
-        ))}
-      </div>
+      {/* EQ — hidden in compact mode */}
+      {!compact && (
+        <div className="flex flex-col gap-0.5 mb-1.5">
+          {(['high', 'mid', 'low'] as const).map(band => (
+            <div key={band} className="flex items-center gap-1">
+              <span className="text-[7px] text-white/25 w-3 text-right uppercase">{band[0]}</span>
+              <EQKnob value={channel.eq[band]} onChange={v => onUpdate({ eq: { ...channel.eq, [band]: v } })} />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Pan */}
       <input type="range" min={-100} max={100} value={channel.pan}
         onChange={e => onUpdate({ pan: Number(e.target.value) })}
-        className="w-full mb-2 accent-blue-500" style={{ height: '2px' }} />
+        className="w-full mb-1.5 accent-blue-500" style={{ height: '2px' }} />
 
       {/* VU + fader */}
-      <div className="flex gap-1 items-end flex-1">
-        <VUMeter level={displayLevel} peak={channel.peakLevel} isLive={channel.isLive} />
-        <VerticalFader value={channel.level} onChange={v => onUpdate({ level: v })} />
+      <div className="flex gap-1 items-end">
+        <VUMeter level={displayLevel} peak={channel.peakLevel} isLive={channel.isLive} compact={compact} />
+        <VerticalFader value={channel.level} onChange={v => onUpdate({ level: v })} compact={compact} />
       </div>
 
-      {/* dB */}
-      <div className="text-[9px] font-mono text-white/40 my-1">
+      {/* dB readout */}
+      <div className="text-[8px] font-mono text-white/35 mt-0.5 mb-1">
         {channel.level === 0 ? '-∞' : `${((channel.level - 100) / 100 * 60).toFixed(1)}`}
       </div>
 
-      {/* Mute / Solo */}
-      <div className="flex gap-1">
-        <button onClick={() => onUpdate({ muted: !channel.muted })}
+      {/* M / S */}
+      <div className="flex gap-0.5">
+        <button
+          onClick={() => onUpdate({ muted: !channel.muted })}
           className={cn('px-1.5 py-0.5 rounded text-[8px] font-bold uppercase transition-colors',
             channel.muted ? 'bg-red-600 text-white' : 'bg-white/10 text-white/40 hover:bg-white/20')}>
           M
         </button>
-        <button onClick={() => onUpdate({ solo: !channel.solo })}
+        <button
+          onClick={() => onUpdate({ solo: !channel.solo })}
           className={cn('px-1.5 py-0.5 rounded text-[8px] font-bold uppercase transition-colors',
             channel.solo ? 'bg-yellow-500 text-black' : 'bg-white/10 text-white/40 hover:bg-white/20')}>
           S
@@ -208,108 +203,176 @@ function ChannelStrip({ channel, onUpdate }: {
 
 // ─── AudioMixer ───────────────────────────────────────────────────────────────
 
-export function AudioMixer() {
-  const [channels, setChannels] = useState<AudioChannel[]>(INITIAL_CHANNELS)
-  const [masterLevel, setMasterLevel] = useState(80)
+export function AudioMixer({ compact }: { compact?: boolean }) {
+  const { sources } = useMediaEngine()
+
+  const [channels,    setChannels]    = useState<AudioChannel[]>(STATIC_CHANNELS)
+  const [masterLevel, setMasterLevel] = useState(85)
   const [masterMuted, setMasterMuted] = useState(false)
-  const [micStatus, setMicStatus] = useState<'idle'|'active'|'denied'>('idle')
+  const [micStatus,   setMicStatus]   = useState<'idle' | 'active' | 'denied'>('idle')
 
-  const audioCtxRef = useRef<AudioContext | null>(null)
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const rafRef      = useRef<number>(0)
+  const audioCtxRef  = useRef<AudioContext | null>(null)
+  const micAnalyser  = useRef<AnalyserNode | null>(null)
+  const srcAnalysers = useRef<Map<string, AnalyserNode>>(new Map())
+  const rafRef       = useRef<number>(0)
 
+  // ── Create a shared AudioContext on mount ──────────────────────────────────
+  useEffect(() => {
+    const ctx = new AudioContext()
+    audioCtxRef.current = ctx
+    return () => { ctx.close(); audioCtxRef.current = null }
+  }, [])
+
+  // ── Mic monitoring ─────────────────────────────────────────────────────────
   const startMicMonitor = useCallback(async () => {
-    if (analyserRef.current) return  // already running
+    if (micAnalyser.current) return
+    const ctx = audioCtxRef.current
+    if (!ctx) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-      const ctx     = new AudioContext()
-      const source  = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 1024
-      source.connect(analyser)
-
-      audioCtxRef.current = ctx
-      analyserRef.current = analyser
+      const src = ctx.createMediaStreamSource(stream)
+      const an  = ctx.createAnalyser()
+      an.fftSize = 1024
+      src.connect(an)
+      micAnalyser.current = an
       setMicStatus('active')
-
-      const tick = () => {
-        const rms = getRms(analyser)
-        setChannels(chs => chs.map(ch =>
-          ch.isLive ? { ...ch, realLevel: rms, peakLevel: Math.max(ch.peakLevel * 0.97, rms) } : ch
-        ))
-        rafRef.current = requestAnimationFrame(tick)
-      }
-      tick()
     } catch {
       setMicStatus('denied')
     }
   }, [])
 
+  // ── Sync source-linked channels when sources change ────────────────────────
+  useEffect(() => {
+    const ctx = audioCtxRef.current
+    const audioSources = sources.filter(s => s.hasAudio)
+    const activeIds    = new Set(audioSources.map(s => s.id))
+
+    // Remove stale analysers
+    for (const [id] of srcAnalysers.current) {
+      if (!activeIds.has(id)) srcAnalysers.current.delete(id)
+    }
+
+    // Add analysers for new audio sources
+    if (ctx) {
+      for (const src of audioSources) {
+        if (srcAnalysers.current.has(src.id)) continue
+        const stream = getStream(src.id)
+        if (!stream || stream.getAudioTracks().length === 0) continue
+        try {
+          const mediaSrc = ctx.createMediaStreamSource(stream)
+          const an       = ctx.createAnalyser()
+          an.fftSize = 1024
+          mediaSrc.connect(an)
+          srcAnalysers.current.set(src.id, an)
+        } catch (e) {
+          console.warn('[AudioMixer] source analyser:', e)
+        }
+      }
+    }
+
+    // Sync dynamic channels (one per audio source)
+    setChannels(prev => {
+      const staticChs = prev.filter(ch => !ch.sourceId)
+      const dynChs    = audioSources.map(src => {
+        const existing = prev.find(ch => ch.sourceId === src.id)
+        return existing ?? {
+          id:       `src-${src.id}`,
+          name:     src.label.slice(0, 9),
+          type:     'source' as const,
+          sourceId: src.id,
+          level:    75,
+          muted:    false,
+          solo:     false,
+          pan:      0,
+          eq:       { low: 0, mid: 0, high: 0 },
+          peakLevel: 0,
+          isLive:   true,
+        }
+      })
+      return [...staticChs, ...dynChs]
+    })
+  }, [sources])
+
+  // ── RAF loop ───────────────────────────────────────────────────────────────
   useEffect(() => {
     startMicMonitor()
-    return () => {
-      cancelAnimationFrame(rafRef.current)
-      audioCtxRef.current?.close()
+
+    const tick = () => {
+      // Mic level → live-mic channel
+      if (micAnalyser.current) {
+        const rms = getRms(micAnalyser.current)
+        setChannels(chs => chs.map(ch =>
+          ch.id === 'live-mic'
+            ? { ...ch, realLevel: rms, peakLevel: Math.max(ch.peakLevel * 0.97, rms) }
+            : ch
+        ))
+      }
+
+      // Source audio levels
+      for (const [srcId, an] of srcAnalysers.current) {
+        const rms = getRms(an)
+        setChannels(chs => chs.map(ch =>
+          ch.sourceId === srcId
+            ? { ...ch, realLevel: rms, peakLevel: Math.max(ch.peakLevel * 0.97, rms) }
+            : ch
+        ))
+      }
+
+      rafRef.current = requestAnimationFrame(tick)
     }
+    tick()
+
+    return () => cancelAnimationFrame(rafRef.current)
   }, [startMicMonitor])
 
-  function updateChannel(id: string, updates: Partial<AudioChannel>) {
-    setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, ...updates } : ch))
+  function updateChannel(id: string, u: Partial<AudioChannel>) {
+    setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, ...u } : ch))
   }
 
   const masterDisplay = masterMuted ? 0 : masterLevel
 
   return (
-    <div className="h-full flex flex-col bg-[#080810]">
+    <div className="h-full flex flex-col bg-[#07070f]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.05] shrink-0">
-        <h3 className="text-xs font-semibold text-white/60 uppercase tracking-widest">Audio Mixer</h3>
-        <div className="flex items-center gap-3">
-          {/* Mic status */}
-          <div className={cn('flex items-center gap-1.5 text-[10px]',
-            micStatus === 'active' ? 'text-emerald-400' :
-            micStatus === 'denied' ? 'text-red-400' : 'text-white/30')}>
-            {micStatus === 'active' ? (
-              <><Activity size={10} className="animate-pulse" /> Live input active</>
-            ) : micStatus === 'denied' ? (
-              <><MicOff size={10} /> Mic denied</>
-            ) : (
-              <><Mic2 size={10} /> Waiting for mic…</>
-            )}
-          </div>
-          <button className="flex items-center gap-1.5 px-3 py-1 rounded text-[11px] text-white/50 hover:text-white hover:bg-white/[0.05] transition-colors">
-            <Settings2 size={11} /> Routing
-          </button>
+      <div className="flex items-center justify-between px-3 border-b border-white/[0.05] shrink-0" style={{ height: '26px' }}>
+        <span className="text-[9px] font-semibold text-white/40 uppercase tracking-widest">Audio Mixer</span>
+        <div className={cn('flex items-center gap-1 text-[9px]',
+          micStatus === 'active' ? 'text-emerald-400' :
+          micStatus === 'denied' ? 'text-red-400' :
+                                   'text-white/25')}>
+          {micStatus === 'active' ? <><Activity size={9} className="animate-pulse" /> Live mic</> :
+           micStatus === 'denied' ? <><MicOff size={9} /> Denied</> :
+                                    <><Mic2 size={9} /> Waiting…</>}
         </div>
       </div>
 
       {/* Channel strips */}
       <div className="flex-1 flex overflow-x-auto overflow-y-hidden">
-        <div className="flex gap-0 h-full">
-          {channels.map(channel => (
-            <ChannelStrip
-              key={channel.id}
-              channel={channel}
-              onUpdate={updates => updateChannel(channel.id, updates)}
-            />
-          ))}
+        {channels.map(ch => (
+          <ChannelStrip key={ch.id} channel={ch} onUpdate={u => updateChannel(ch.id, u)} compact={compact} />
+        ))}
 
-          {/* Master */}
-          <div className="flex flex-col items-center border-l border-white/10 bg-white/[0.02] px-4 py-3 min-w-[72px]">
-            <span className="text-[9px] text-white/40 uppercase tracking-widest mb-3">Master</span>
-            <VUMeter level={masterDisplay} peak={masterDisplay + 2} color="purple" />
-            <div className="flex-1 flex items-center">
-              <VerticalFader value={masterLevel} onChange={setMasterLevel} color="purple" />
-            </div>
-            <div className="text-[10px] font-mono text-white/60 mb-2">
-              {masterLevel === 0 ? '-∞' : `${masterLevel > 0 ? '+' : ''}${((masterLevel-100)/100*60).toFixed(1)}`} dB
-            </div>
-            <button onClick={() => setMasterMuted(!masterMuted)}
-              className={cn('w-10 h-7 rounded text-[9px] font-bold uppercase tracking-wide transition-colors',
-                masterMuted ? 'bg-red-600 text-white' : 'bg-white/10 text-white/50 hover:bg-white/20')}>
-              {masterMuted ? 'MUTE' : 'M'}
-            </button>
+        {/* Master */}
+        <div className="flex flex-col items-center border-l border-white/10 bg-white/[0.02] px-3 py-2 min-w-[64px]">
+          <span className="text-[8px] text-white/40 uppercase tracking-widest mb-2">Master</span>
+          <VUMeter level={masterDisplay} peak={masterDisplay + 2} compact={compact} />
+          <div className="flex-1 flex items-center mt-1">
+            <VerticalFader
+              value={masterLevel}
+              onChange={setMasterLevel}
+              color="purple"
+              compact={compact}
+            />
           </div>
+          <div className="text-[9px] font-mono text-white/50 mb-1.5">
+            {masterLevel === 0 ? '-∞' : `${((masterLevel - 100) / 100 * 60).toFixed(1)}`} dB
+          </div>
+          <button
+            onClick={() => setMasterMuted(m => !m)}
+            className={cn('w-9 py-0.5 rounded text-[8px] font-bold uppercase transition-colors',
+              masterMuted ? 'bg-red-600 text-white' : 'bg-white/10 text-white/50 hover:bg-white/20')}>
+            {masterMuted ? 'MUTE' : 'M'}
+          </button>
         </div>
       </div>
     </div>
