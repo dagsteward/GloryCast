@@ -14,7 +14,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)",
       "PowerShell(cd D:\\\\PROJECTS\\\\GloryCast\\\\apps\\\\desktop && npx vite --port 5173 2>&1 &)",
       "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c cd D:\\\\PROJECTS\\\\GloryCast\\\\apps\\\\desktop && npx vite --port 5173\" -WindowStyle Normal)",
-      "PowerShell(Test-NetConnection -ComputerName localhost -Port 5173 -InformationLevel Quiet 2>&1)"
+      "PowerShell(Test-NetConnection -ComputerName localhost -Port 5173 -InformationLevel Quiet 2>&1)",
+      "Bash(find /mnt/user-data/uploads/D--PROJECTS-GloryCast -type f | head -5 2>/dev/null || ls D:/PROJECTS/GloryCast 2>/dev/null || ls)",
+      "Bash(npx vite *)"
     ]
   }
 }
