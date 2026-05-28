@@ -1,0 +1,63 @@
+name: Deploy to Production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Hetzner via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          script:   |
+            set -e
+            cd /opt/glorycast
+
+            # Pull latest images
+            docker pull glorycast/api:latest
+            docker pull glorycast/ai-worker:latest
+            docker pull glorycast/stream-worker:latest
+
+            # Rolling update — API
+            docker compose -f infrastructure/docker/docker-compose.yml \
+                           -f infrastructure/docker/docker-compose.prod.yml \
+              up -d --no-deps api ai-worker stream-worker nginx
+
+            # Run migrations
+            docker compose exec -T api npx prisma migrate deploy
+
+            # Health check
+            sleep 10
+            curl -fsS http://localhost:3001/api/v1/health || (echo "Health check failed" && exit 1)
+
+            echo "Deploy completed at $(date)"
+
+      - name: Notify Slack on success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL }}
+          slack-message: ':white_check_mark: GloryCast deployed to production — commit `${{ github.sha }}`'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL }}
+          slack-message: ':x: GloryCast deployment *failed* — commit `${{ github.sha }}`'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}

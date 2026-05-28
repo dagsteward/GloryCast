@@ -1,0 +1,657 @@
+// GloryCast AI — Prisma Schema
+// Database: PostgreSQL
+// ORM: Prisma v5
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  CHURCH_ADMIN
+  PRODUCER
+  BIBLE_OPERATOR
+  LYRICS_OPERATOR
+  CAMERA_OPERATOR
+  VIEWER
+}
+
+enum StreamStatus {
+  IDLE
+  LIVE
+  RECORDING
+  ENDED
+  ERROR
+}
+
+enum WebinarStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum MediaType {
+  VIDEO
+  AUDIO
+  IMAGE
+  DOCUMENT
+}
+
+enum TranscriptionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum QuizStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum PollStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum EventType {
+  SUNDAY_SERVICE
+  BIBLE_STUDY
+  PRAYER_MEETING
+  CONFERENCE
+  WEBINAR
+  SPECIAL_EVENT
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+// ─── Churches (multi-tenancy root) ───────────────────────────────────────────
+
+model Church {
+  id               String           @id @default(cuid())
+  name             String
+  slug             String           @unique
+  description      String?
+  website          String?
+  logoUrl          String?
+  coverUrl         String?
+  timezone         String           @default("America/New_York")
+  country          String           @default("US")
+  subscriptionTier SubscriptionTier @default(FREE)
+  subscriptionEnds DateTime?
+  settings         Json             @default("{}")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  users        ChurchMember[]
+  events       Event[]
+  streams      Stream[]
+  webinars     Webinar[]
+  media        MediaAsset[]
+  quizzes      Quiz[]
+  polls        Poll[]
+  sermons      Sermon[]
+  analytics    Analytic[]
+  apiKeys      ApiKey[]
+
+  @@index([slug])
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  avatarUrl     String?
+  emailVerified Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // OAuth
+  googleId    String? @unique
+  microsoftId String? @unique
+
+  // Refresh tokens
+  refreshTokens RefreshToken[]
+
+  // Church memberships
+  churchMemberships ChurchMember[]
+
+  // Activity
+  createdStreams   Stream[]       @relation("StreamCreator")
+  createdWebinars  Webinar[]      @relation("WebinarCreator")
+  webinarAttendees WebinarAttendee[]
+  quizResponses    QuizResponse[]
+  pollVotes        PollVote[]
+  qaQuestions      QAQuestion[]
+
+  @@index([email])
+}
+
+model ChurchMember {
+  id        String   @id @default(cuid())
+  userId    String
+  churchId  String
+  role      Role     @default(VIEWER)
+  isDefault Boolean  @default(false)
+  joinedAt  DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, churchId])
+  @@index([churchId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  churchId   String
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+
+  @@index([keyHash])
+  @@index([churchId])
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
+model Event {
+  id          String    @id @default(cuid())
+  churchId    String
+  title       String
+  description String?
+  type        EventType @default(SUNDAY_SERVICE)
+  startsAt    DateTime
+  endsAt      DateTime?
+  timezone    String    @default("America/New_York")
+  isPublic    Boolean   @default(true)
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  church   Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  streams  Stream[]
+  sermons  Sermon[]
+  webinars Webinar[]
+
+  @@index([churchId, startsAt])
+}
+
+// ─── Streams ──────────────────────────────────────────────────────────────────
+
+model Stream {
+  id            String       @id @default(cuid())
+  churchId      String
+  creatorId     String
+  eventId       String?
+  title         String
+  description   String?
+  status        StreamStatus @default(IDLE)
+  streamKey     String       @unique @default(cuid())
+  rtmpUrl       String?
+  playbackUrl   String?
+  thumbnailUrl  String?
+  isRecording   Boolean      @default(false)
+  recordingUrl  String?
+  viewerCount   Int          @default(0)
+  peakViewers   Int          @default(0)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  durationSecs  Int?
+  destinations  Json         @default("[]") // [{platform, url, key, status}]
+  settings      Json         @default("{}")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  church       Church     @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  creator      User       @relation("StreamCreator", fields: [creatorId], references: [id])
+  event        Event?     @relation(fields: [eventId], references: [id])
+  scenes       Scene[]
+  analytics    Analytic[]
+
+  @@index([churchId, status])
+  @@index([streamKey])
+}
+
+model Scene {
+  id        String   @id @default(cuid())
+  streamId  String
+  name      String
+  order     Int
+  isActive  Boolean  @default(false)
+  sources   Json     @default("[]") // [{type, id, position, size, ...}]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@index([streamId, order])
+}
+
+// ─── Webinars ─────────────────────────────────────────────────────────────────
+
+model Webinar {
+  id              String        @id @default(cuid())
+  churchId        String
+  creatorId       String
+  hostId          String?
+  eventId         String?
+  title           String
+  description     String?
+  status          WebinarStatus @default(SCHEDULED)
+  platform        String        @default("livekit")
+  roomId          String?
+  meetingId       String?       @unique
+  passcode        String?
+  joinUrl         String?
+  hostUrl         String?
+  maxAttendees    Int           @default(100)
+  durationMinutes Int           @default(60)
+  durationSeconds Int?
+  isRecorded      Boolean       @default(false)
+  isPublic        Boolean       @default(false)
+  scheduledAt     DateTime
+  startedAt       DateTime?
+  endedAt         DateTime?
+  settings        Json          @default("{}")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  church    Church            @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  creator   User              @relation("WebinarCreator", fields: [creatorId], references: [id])
+  event     Event?            @relation(fields: [eventId], references: [id])
+  attendees WebinarAttendee[]
+  questions QAQuestion[]
+  polls     Poll[]
+
+  @@index([churchId, scheduledAt])
+}
+
+model WebinarAttendee {
+  id         String    @id @default(cuid())
+  webinarId  String
+  userId     String?
+  name       String
+  email      String?
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  isCoHost   Boolean   @default(false)
+  isMuted    Boolean   @default(false)
+  token      String?
+
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([webinarId])
+}
+
+// ─── Media ────────────────────────────────────────────────────────────────────
+
+model MediaAsset {
+  id            String    @id @default(cuid())
+  churchId      String
+  uploadedById  String?
+  objectKey     String
+  fileName      String
+  title         String?
+  name          String    @default("")
+  assetType     String    @default("VIDEO")
+  type          MediaType @default(VIDEO)
+  mimeType      String
+  url           String
+  thumbnailUrl  String?
+  fileSize      BigInt    @default(0)
+  sizeBytes     BigInt    @default(0)
+  durationSecs  Int?
+  status        String    @default("READY")
+  metadata      Json      @default("{}")
+  tags          String[]
+  isPublic      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+
+  @@index([churchId, assetType])
+  @@index([churchId, createdAt])
+}
+
+// ─── Bible ────────────────────────────────────────────────────────────────────
+
+model BibleBook {
+  id           Int    @id
+  name         String
+  abbreviation String
+  testament    String // OT | NT
+  chapters     Int
+  order        Int
+
+  verses BibleVerse[]
+
+  @@index([name])
+  @@index([abbreviation])
+}
+
+model BibleVerse {
+  id          String @id @default(cuid())
+  bookId      Int
+  chapter     Int
+  verse       Int
+  translation String // KJV, NIV, ESV, etc.
+  text        String
+  searchText  String // normalized for search
+
+  book BibleBook @relation(fields: [bookId], references: [id])
+
+  @@unique([bookId, chapter, verse, translation])
+  @@index([translation, bookId, chapter])
+  @@index([searchText])
+}
+
+model BibleReference {
+  id          String   @id @default(cuid())
+  churchId    String?
+  streamId    String?
+  bookId      Int
+  chapter     Int
+  verse       Int?
+  verseEnd    Int?
+  translation String   @default("NIV")
+  detectedText String?
+  confidence  Float?
+  detectedAt  DateTime @default(now())
+
+  @@index([streamId, detectedAt])
+}
+
+// ─── Sermons ──────────────────────────────────────────────────────────────────
+
+model Sermon {
+  id          String   @id @default(cuid())
+  churchId    String
+  eventId     String?
+  title       String
+  speakerName String
+  summary     String?
+  transcript  String?
+  outline     Json?    // AI-generated outline
+  keyVerses   Json     @default("[]") // [{book, chapter, verse, text}]
+  audioUrl    String?
+  videoUrl    String?
+  tags        String[]
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  event  Event? @relation(fields: [eventId], references: [id])
+
+  @@index([churchId, publishedAt])
+}
+
+// ─── AI Transcriptions ───────────────────────────────────────────────────────
+
+model Transcription {
+  id         String              @id @default(cuid())
+  streamId   String?
+  webinarId  String?
+  audioUrl   String?
+  language   String              @default("en")
+  model      String              @default("base.en")
+  status     TranscriptionStatus @default(PENDING)
+  text       String?
+  segments   Json?               // [{start, end, text, confidence}]
+  scriptures Json                @default("[]") // detected references
+  processingMs Int?
+  createdAt  DateTime            @default(now())
+  completedAt DateTime?
+
+  @@index([streamId])
+  @@index([status])
+}
+
+// ─── Quizzes ──────────────────────────────────────────────────────────────────
+
+model Quiz {
+  id               String     @id @default(cuid())
+  churchId         String
+  streamId         String?
+  title            String
+  description      String?
+  status           QuizStatus @default(DRAFT)
+  startedAt        DateTime?
+  timeLimitSecs    Int?
+  maxAttempts      Int        @default(1)
+  showAnswers      Boolean    @default(true)
+  shuffleQuestions Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  church    Church         @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  responses QuizResponse[]
+
+  @@index([churchId, status])
+}
+
+model QuizQuestion {
+  id             String   @id @default(cuid())
+  quizId         String
+  text           String
+  options        Json     // [{id, text, isCorrect}]
+  explanation    String?
+  points         Int      @default(10)
+  order          Int
+  imageUrl       String?
+  timeoutSecs    Int?
+  createdAt      DateTime @default(now())
+
+  quiz      Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  responses QuizResponse[]
+
+  @@index([quizId, order])
+}
+
+model QuizResponse {
+  id         String   @id @default(cuid())
+  quizId     String
+  questionId String
+  userId     String?
+  sessionId  String   // anonymous support
+  answer     String
+  isCorrect  Boolean
+  pointsEarned Int    @default(0)
+  responseMs Int?
+  answeredAt DateTime @default(now())
+
+  quiz     Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User?        @relation(fields: [userId], references: [id])
+
+  @@index([quizId, sessionId])
+  @@index([quizId, userId])
+}
+
+// ─── Polls ────────────────────────────────────────────────────────────────────
+
+model Poll {
+  id            String     @id @default(cuid())
+  churchId      String
+  streamId      String?
+  webinarId     String?
+  question      String
+  options       Json       // [{id, text, votes}]
+  status        PollStatus @default(DRAFT)
+  allowMultiple Boolean    @default(false)
+  showResults   Boolean    @default(true)
+  startedAt     DateTime?
+  closedAt      DateTime?
+  endsAt        DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  church  Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  webinar Webinar?  @relation(fields: [webinarId], references: [id])
+  votes   PollVote[]
+
+  @@index([churchId, status])
+  @@index([churchId, createdAt])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  userId    String?
+  sessionId String
+  optionIds String[] // supports multiple choice
+  votedAt   DateTime @default(now())
+
+  poll Poll  @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, sessionId])
+  @@index([pollId])
+}
+
+// ─── Q&A ─────────────────────────────────────────────────────────────────────
+
+model QAQuestion {
+  id          String   @id @default(cuid())
+  churchId    String   @default("")
+  streamId    String?
+  webinarId   String?
+  userId      String?
+  authorId    String?
+  authorName  String
+  text        String
+  answer      String?
+  isAnonymous Boolean  @default(false)
+  isAnswered  Boolean  @default(false)
+  isApproved  Boolean  @default(true)
+  isStarred   Boolean  @default(false)
+  upvotes     Int      @default(0)
+  answeredAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  webinar Webinar? @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@index([churchId, streamId, createdAt])
+  @@index([webinarId, createdAt])
+}
+
+// ─── Stage Display ────────────────────────────────────────────────────────────
+
+model StageDisplay {
+  id          String   @id @default(cuid())
+  churchId    String   @unique
+  name        String   @default("Main Stage")
+  content     Json     @default("{\"type\":\"BLANK\"}")
+  config      Json     @default("{}")
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([churchId])
+}
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+model Analytic {
+  id         String   @id @default(cuid())
+  churchId   String
+  streamId   String?
+  eventType  String   // viewer_join, viewer_leave, reaction, scripture_detected, etc.
+  sessionId  String?
+  userId     String?
+  platform   String?
+  country    String?
+  metadata   Json     @default("{}")
+  occurredAt DateTime @default(now())
+
+  church Church  @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  stream Stream? @relation(fields: [streamId], references: [id])
+
+  @@index([churchId, eventType, occurredAt])
+  @@index([streamId, occurredAt])
+}
+
+model ViewerSession {
+  id                 String    @id @default(cuid())
+  churchId           String
+  streamId           String?
+  sessionId          String
+  platform           String?
+  country            String?
+  city               String?
+  deviceType         String?
+  joinedAt           DateTime  @default(now())
+  leftAt             DateTime?
+  durationSecs       Int?
+  concurrentViewers  Int?
+
+  createdAt          DateTime  @default(now())
+
+  @@index([churchId, streamId, joinedAt])
+  @@index([churchId, createdAt])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  churchId    String
+  userId      String?
+  type        String
+  title       String
+  body        String
+  data        Json      @default("{}")
+  isBroadcast Boolean   @default(false)
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([churchId, userId, isRead])
+  @@index([churchId, isBroadcast, createdAt])
+}

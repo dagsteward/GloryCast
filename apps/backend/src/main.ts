@@ -1,0 +1,89 @@
+import { NestFactory } from '@nestjs/core'
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
+import { ValidationPipe, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
+import fastifyHelmet from '@fastify/helmet'
+import fastifyCompress from '@fastify/compress'
+import { AppModule } from './app.module'
+import { HttpExceptionFilter } from './common/filters/http-exception.filter'
+import { TransformInterceptor } from './common/interceptors/transform.interceptor'
+
+async function bootstrap() {
+  const logger = new Logger('GloryCast API')
+
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({
+      logger: process.env.NODE_ENV === 'development',
+      trustProxy: true,
+    }),
+    { bufferLogs: true },
+  )
+
+  const config = app.get(ConfigService)
+  const port      = config.get<number>('port')!
+  const prefix    = config.get<string>('apiPrefix')!
+  const origins   = config.get<string[]>('corsOrigins')!
+  const isDev     = config.get<string>('nodeEnv') === 'development'
+  const swaggerOn = config.get<boolean>('swagger.enabled')!
+
+  // ── Security ───────────────────────────────────────────────────────────────
+  await app.register(fastifyHelmet as any, {
+    contentSecurityPolicy: false, // handled at nginx level
+  })
+  await app.register(fastifyCompress as any)
+
+  app.enableCors({
+    origin: origins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
+
+  // ── Global middleware ──────────────────────────────────────────────────────
+  app.setGlobalPrefix(prefix)
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+  app.useGlobalFilters(new HttpExceptionFilter())
+  app.useGlobalInterceptors(new TransformInterceptor())
+
+  // ── Swagger ────────────────────────────────────────────────────────────────
+  if (swaggerOn) {
+    const doc = new DocumentBuilder()
+      .setTitle('GloryCast AI API')
+      .setDescription('AI-powered worship, broadcast & webinar platform API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .addTag('auth',         'Authentication & authorization')
+      .addTag('users',        'User management')
+      .addTag('churches',     'Church management')
+      .addTag('streams',      'Live streaming control')
+      .addTag('webinars',     'Webinar management')
+      .addTag('bible',        'Bible search & references')
+      .addTag('ai',           'AI scripture detection & sermon tools')
+      .addTag('quiz',         'Interactive quizzes')
+      .addTag('polls',        'Live polls')
+      .addTag('media',        'Media assets & uploads')
+      .addTag('analytics',    'Stream & engagement analytics')
+      .addTag('stage-display','Stage display management')
+      .build()
+
+    const document = SwaggerModule.createDocument(app, doc)
+    SwaggerModule.setup(`${prefix}/docs`, app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    })
+    logger.log(`📚 Swagger docs: http://localhost:${port}/${prefix}/docs`)
+  }
+
+  await app.listen(port, '0.0.0.0')
+  logger.log(`🚀 GloryCast API running on http://localhost:${port}/${prefix}`)
+  logger.log(`🌍 Environment: ${config.get('nodeEnv')}`)
+}
+
+bootstrap()
