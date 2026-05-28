@@ -1,0 +1,98 @@
+/*
+This CSS (Cascading Style Sheets) file contains all formatting styles for Browser window.
+Edit this file ONLY if you have good knowledge of CSS and HTML programming languages.
+Visit below links for reference and training: 
+	http://www.w3.org/Style/CSS/
+	http://www.w3schools.com/css/
+*/
+
+/*Whole Document*/
+body{background:White;color:Black;}
+body.night{background:#191919;color:White;}
+
+/*Paragraphs*/
+p{margin-top:-0.7em;}
+
+/*Indentation*/
+div.indent{margin-left:15px;}
+
+/*Bibles info*/
+div.organize{text-indent:-2em;padding-left:2em;font-size:90%;}
+
+/*#######################*/
+
+/*Main Title*/
+h1{font-family:Trebuchet MS;font-weight:bold;font-size:130%;color:Navy;font-variant:small-caps;}
+.night h1{color:#8080ff;}
+
+/*Section Title*/
+h2{font-family:Tahoma;font-weight:bold;font-size:120%;color:#6633cc;}
+.night h2{color:#b299e6;}
+
+/*Verse Number*/
+span.nrver{white-space:nowrap;font-size:90%;color:#006666;font-weight:bold;}
+.night span.nrver{color:#99ffff;}
+
+/*Verse Text*/
+span.txtver{color:Black;}
+.night span.txtver{color:White;}
+
+/*Current Part Text*/
+span.crnpart{background:#ffccff;}
+.night span.crnpart{background:#800080;}
+
+/*Searched word*/
+span.wrd{background:Cyan;font-weight:bold;}
+.night span.wrd{background:#006666;}
+
+/*Words of Jesus*/
+span.Isus{color:Red;}
+.night span.Isus{color:#ff8080;}
+
+/*#######################*/
+
+/*Tables*/
+table.txtbib{width:100%;border-collapse:collapse;border:0;font-size:100%;}
+table.txtbib tr.bibrow td{border-top:1px solid Gray;border-bottom:1px solid Gray;padding:3px;}
+table.txtbib td.col1{text-align:center;border-right:1px dotted Gray;}
+table.txtbib tr.prvrow{background:#ddffdd;border-top:1px solid Gray;border-bottom:1px solid Gray;}
+.night table.txtbib tr.prvrow{background:#004d00;}
+table.txtbib tr.shwrow{background:#ffd75c;border-top:1px solid Gray;border-bottom:1px solid Gray;}
+.night table.txtbib tr.shwrow{background:#806000;}
+table.txtbib tr.plyrow{background:#ffccff;border-top:1px solid Gray;border-bottom:1px solid Gray;}
+.night table.txtbib tr.plyrow{background:#660066;}
+table.txtbib tr.frzrow{background:LightCyan;border-top:1px solid Gray;border-bottom:1px solid Gray;}
+.night table.txtbib tr.frzrow{background:#008080;}
+table.txtbib tr.separator td{border:1px solid Gray;background:Lime;}
+table.srctxt{width:100%;border-collapse:collapse;border:1px solid Gray;font-size:100%;}
+table.srctxt td.col1{border-right:1px dotted Gray;}
+table.info{width:100%;border-collapse:collapse;border:0;font-size:80%;}
+table.info td{border:1px dotted Gray;padding:3px;}
+
+/*#######################*/
+
+/*Links*/
+a:link{color:Blue;text-decoration:none;}
+.night a:link{color:#809fff;}
+a:visited{color:Blue;}
+.night a:visited{color:#809fff;}
+a:hover{color:Blue;background:#fffff0;}
+.night a:hover{color:#809fff;background:#29290a;}
+a:active{color:Red;}
+
+/*Buttons*/
+input{font:bold 100% 'Arial';cursor:hand;vertical-align:bottom;}
+input.shwbut{color:Red;}
+input.frzbut{color:Blue;}
+input.addbut{color:Black;}
+input.hidebut{color:#444444;font-size:1.5em;padding:2 10 0 10;}
+input.renbut{font:80%;}
+input.law{background:#ffffcc;}
+input.history{background:#ffddaa;}
+input.wisdom{background:#ccffcc;}
+input.prophet1{background:#ffccff;}
+input.prophet2{background:#ccffff;}
+input.gospel{background:#ffff99;}
+input.paul{background:#ddddff;}
+input.epistle{background:#ffdddd;}
+input.apocrypha{background:#dddddd;}

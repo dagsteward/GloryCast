@@ -16,3 +16,11 @@ release/
 *.snap
 .DS_Store
 Thumbs.db
+
+# BibleShow large binary assets (place manually — too large for git)
+packages/bible-engine/Bibles/
+packages/bible-engine/Backgrounds/
+packages/bible-engine/NDI/
+packages/bible-engine/*.dll
+packages/bible-engine/*.chm
+packages/bible-engine/*.mdw
