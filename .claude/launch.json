@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "GloryCast UI",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:renderer"],
+      "port": 5173,
+      "cwd": "apps/desktop"
+    }
+  ]
+}

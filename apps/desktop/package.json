@@ -1,0 +1,73 @@
+{
+  "name": "@glorycast/desktop",
+  "version": "1.0.0",
+  "description": "GloryCast AI Desktop Application",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p tsconfig.main.json --watch",
+    "dev:renderer": "vite --config vite.config.ts",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "electron": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-slider": "^1.1.2",
+    "@radix-ui/react-switch": "^1.0.3",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tooltip": "^1.0.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.0",
+    "framer-motion": "^11.18.2",
+    "lucide-react": "^0.363.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.3",
+    "socket.io-client": "^4.7.0",
+    "tailwind-merge": "^2.6.1",
+    "tailwindcss": "^3.4.19",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^8.2.0",
+    "electron": "^29.0.0",
+    "electron-builder": "^24.13.0",
+    "postcss": "^8.5.15",
+    "vite": "^5.4.21"
+  },
+  "build": {
+    "appId": "ai.glorycast.app",
+    "productName": "GloryCast AI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

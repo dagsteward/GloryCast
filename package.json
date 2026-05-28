@@ -1,0 +1,32 @@
+{
+  "name": "glorycast-ai",
+  "version": "1.0.0",
+  "description": "GloryCast AI — The Intelligent Worship & Broadcast Operating System",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "dev:desktop": "turbo run dev --filter=@glorycast/desktop",
+    "dev:backend": "turbo run dev --filter=@glorycast/backend",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "clean": "turbo run clean && rimraf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.0",
+    "rimraf": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

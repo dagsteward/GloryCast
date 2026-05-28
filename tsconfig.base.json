@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "paths": {
+      "@glorycast/ui": ["./packages/ui/src/index.ts"],
+      "@glorycast/shared-types": ["./packages/shared-types/src/index.ts"],
+      "@glorycast/bible-engine": ["./packages/bible-engine/src/index.ts"],
+      "@glorycast/ai-core": ["./packages/ai-core/src/index.ts"]
+    }
+  }
+}
