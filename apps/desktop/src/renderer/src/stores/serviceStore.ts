@@ -65,6 +65,12 @@ interface ServiceState {
   program:  LiveItem | null
   history:  LiveItem[]           // things that have gone live, newest first
 
+  // ── Graphics deck ──────────────────────────────────────────────────
+  // Prepared graphic sources (scripture verses, songs, announcements) that
+  // can be switched like any other source. The Bible page queues into here;
+  // the Production switch deck lists them under a "Graphics" tab.
+  graphics: LiveItem[]
+
   // ── Actions: service ───────────────────────────────────────────────
   startService: (title?: string) => void
   stopService:  () => void
@@ -89,6 +95,12 @@ interface ServiceState {
   cutToProgram: (item: Omit<LiveItem, 'id'>) => void
   clearProgram: () => void
   clearPreview: () => void
+
+  // ── Actions: graphics deck ─────────────────────────────────────────
+  /** Add a graphic source to the switch deck (deduped by title). Returns its id. */
+  addGraphic: (item: Omit<LiveItem, 'id'>) => string
+  removeGraphic: (id: string) => void
+  clearGraphics: () => void
 }
 
 const AUTO_PILOT_THRESHOLD = 0.88
@@ -125,6 +137,9 @@ export const useServiceStore = create<ServiceState>()(
       preview: null,
       program: null,
       history: [],
+
+      // ── Graphics deck ──
+      graphics: [],
 
       // ── Service actions ──
       startService: (title) => set((s) => ({
@@ -172,6 +187,16 @@ export const useServiceStore = create<ServiceState>()(
         }
         set((s) => ({ detections: [detection, ...s.detections].slice(0, 24) }), false, 'addDetection')
 
+        // Every detection also lands in the shared graphics deck, so it becomes
+        // a switchable source in the Production deck (re-usable, not just live once).
+        get().addGraphic({
+          kind:     detection.kind,
+          title:    detection.reference,
+          body:     detection.text,
+          subtitle: detection.subtitle,
+          source:   'ai',
+        })
+
         // Auto-pilot: a confident hit goes straight to Preview, hands-free.
         const { autoPilot } = get()
         if (autoPilot && detection.confidence >= AUTO_PILOT_THRESHOLD) {
@@ -215,6 +240,23 @@ export const useServiceStore = create<ServiceState>()(
 
       clearProgram: () => set({ program: null }, false, 'clearProgram'),
       clearPreview: () => set({ preview: null }, false, 'clearPreview'),
+
+      // ── Graphics deck actions ──
+      addGraphic: (item) => {
+        const existing = get().graphics.find(
+          g => g.kind === item.kind && g.title === item.title && g.subtitle === item.subtitle,
+        )
+        if (existing) return existing.id
+        const id = uid('gfx')
+        set((s) => ({ graphics: [{ ...item, id }, ...s.graphics].slice(0, 48) }), false, 'addGraphic')
+        return id
+      },
+
+      removeGraphic: (id) => set((s) => ({
+        graphics: s.graphics.filter(g => g.id !== id),
+      }), false, 'removeGraphic'),
+
+      clearGraphics: () => set({ graphics: [] }, false, 'clearGraphics'),
     }),
     { name: 'GloryCast/Service' },
   ),

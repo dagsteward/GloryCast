@@ -10,6 +10,7 @@ import {
 import { cn } from '../lib/utils'
 import { LowerThird } from '../components/bible/LowerThird'
 import type { LowerThirdStyle } from '../components/bible/LowerThird'
+import { useServiceStore, type LiveItem } from '../stores/serviceStore'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -277,6 +278,13 @@ export function BiblePage() {
   const [showSecondaryDropdown, setShowSecondaryDropdown] = useState(false)
   const verseRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
+  // Shared production bus — queueing/taking a verse here drives the same
+  // Preview → Program bus that the Production switch deck and monitors use.
+  const addGraphic     = useServiceStore(s => s.addGraphic)
+  const gfxToPreview   = useServiceStore(s => s.sendToPreview)
+  const gfxToProgram   = useServiceStore(s => s.cutToProgram)
+  const gfxClearProgram = useServiceStore(s => s.clearProgram)
+
   const verses           = getVerses(selectedBook.name, selectedChapter)
   const bookmarkKey      = (v: number) => `${selectedBook.name}:${selectedChapter}:${v}`
   const selectedVerseData = verses.find(v => v.verse === selectedVerse)
@@ -338,6 +346,19 @@ export function BiblePage() {
 
   // ── Display queue ────────────────────────────────────────────────────────────
 
+  // Map a Bible queue item to the shared LiveItem graphic-bus shape.
+  function toLiveItem(item: QueueItem): Omit<LiveItem, 'id'> {
+    return {
+      kind:     'scripture',
+      title:    `${item.book} ${item.chapter}:${item.verse}`,
+      body:     item.primaryText,
+      subtitle: item.secondaryTranslation
+        ? `${item.primaryTranslation} + ${item.secondaryTranslation}`
+        : item.primaryTranslation,
+      source:   'bible',
+    }
+  }
+
   function sendToDisplay(v: VerseData) {
     const primaryRef    = `${selectedBook.name} ${selectedChapter}:${v.verse}`
     const secondaryText = dualMode
@@ -359,6 +380,9 @@ export function BiblePage() {
       timestamp:           Date.now(),
     }
     setDisplayQueue(q => [...q, item])
+    // Mirror into the shared graphics deck so it appears in the Production
+    // switch deck under the "Graphics" tab.
+    addGraphic(toLiveItem(item))
     setProducerOpen(true)
   }
 
@@ -367,6 +391,7 @@ export function BiblePage() {
     setDisplayQueue(q => q.filter(i => i.id !== item.id))
     if (previewItem) setDisplayQueue(q => [...q, { ...previewItem, state: 'prepared' as const }])
     setPreviewItem(updated)
+    gfxToPreview(toLiveItem(updated))   // shared bus → Production PREVIEW monitor
   }
 
   function moveToProgram(item: QueueItem) {
@@ -374,6 +399,7 @@ export function BiblePage() {
     if (programItem) setDisplayQueue(q => [...q, { ...programItem, state: 'prepared' as const }])
     setProgramItem(updated)
     setPreviewItem(null)
+    gfxToProgram(toLiveItem(updated))   // shared bus → live on PROGRAM
   }
 
   function sendPreviewToProgram() {
@@ -384,6 +410,7 @@ export function BiblePage() {
   function clearProgram() {
     if (programItem) setDisplayQueue(q => [...q, { ...programItem, state: 'prepared' as const }])
     setProgramItem(null)
+    gfxClearProgram()                   // clear the shared PROGRAM graphic too
   }
 
   function removeFromQueue(id: string) {

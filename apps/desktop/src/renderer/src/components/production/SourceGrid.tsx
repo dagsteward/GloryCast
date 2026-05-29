@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState } from 'react'
-import { Plus, Camera, Monitor, Play, Cpu, ChevronDown, X, RefreshCw } from 'lucide-react'
+import { Plus, Camera, Monitor, Play, Cpu, ChevronDown, X, RefreshCw, BookOpen, Music, Send } from 'lucide-react'
 import { useMediaEngine, getStream } from '../../hooks/useMediaEngine'
+import { useServiceStore } from '../../stores/serviceStore'
 import { cn } from '../../lib/utils'
 
-type Tab = 'video' | 'media' | 'ndi' | 'capture' | 'virtual'
+type Tab = 'video' | 'media' | 'graphics' | 'ndi' | 'capture' | 'virtual'
 
 // ─── Live thumbnail ───────────────────────────────────────────────────────────
 
@@ -35,16 +36,24 @@ export function SourceGrid() {
     enumerateDevices,
   } = useMediaEngine()
 
+  // Shared graphics bus (scripture / song lower-thirds) — switchable sources.
+  const graphics      = useServiceStore(s => s.graphics)
+  const gfxPreview    = useServiceStore(s => s.preview)
+  const gfxProgram    = useServiceStore(s => s.program)
+  const sendToPreview = useServiceStore(s => s.sendToPreview)
+  const removeGraphic = useServiceStore(s => s.removeGraphic)
+
   const [tab, setTab] = useState<Tab>('video')
   const [menuOpen, setMenuOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'video',   label: 'Video Sources' },
-    { id: 'media',   label: 'Media' },
-    { id: 'ndi',     label: 'NDI' },
-    { id: 'capture', label: 'Capture Cards' },
-    { id: 'virtual', label: 'Virtual' },
+  const TABS: { id: Tab; label: string; count?: number }[] = [
+    { id: 'video',    label: 'Video Sources' },
+    { id: 'media',    label: 'Media' },
+    { id: 'graphics', label: 'Graphics', count: graphics.length },
+    { id: 'ndi',      label: 'NDI' },
+    { id: 'capture',  label: 'Capture Cards' },
+    { id: 'virtual',  label: 'Virtual' },
   ]
 
   const tabSources = sources.filter(s => {
@@ -93,6 +102,11 @@ export function SourceGrid() {
                 : 'text-white/25 border-transparent hover:text-white/50',
             )}>
             {t.label}
+            {!!t.count && (
+              <span className="ml-1.5 px-1 py-px rounded bg-purple-500/25 text-purple-300 text-[8px] font-bold align-middle">
+                {t.count}
+              </span>
+            )}
           </button>
         ))}
 
@@ -145,7 +159,76 @@ export function SourceGrid() {
         </div>
       </div>
 
+      {/* Graphics strip (scripture / song lower-thirds) */}
+      {tab === 'graphics' && (
+        <div className="flex items-start gap-1.5 px-2 py-1.5 overflow-x-auto flex-1">
+          {graphics.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-1 py-3">
+              <BookOpen size={16} className="text-white/15" />
+              <p className="text-[10px] text-white/25">No graphics queued</p>
+              <p className="text-[9px] text-white/15">Queue verses from the Bible page or let the AI Copilot detect them</p>
+            </div>
+          )}
+          {graphics.map((g, idx) => {
+            const isPgm = gfxProgram?.kind === g.kind && gfxProgram?.title === g.title && gfxProgram?.subtitle === g.subtitle
+            const isPvw = gfxPreview?.kind === g.kind && gfxPreview?.title === g.title && gfxPreview?.subtitle === g.subtitle
+            return (
+              <div key={g.id}
+                onClick={() => sendToPreview({ kind: g.kind, title: g.title, body: g.body, subtitle: g.subtitle, background: g.background, source: g.source })}
+                className={cn(
+                  'group relative shrink-0 rounded-lg overflow-hidden cursor-pointer border transition-all flex flex-col',
+                  isPgm ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.45)]' :
+                  isPvw  ? 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' :
+                           'border-white/[0.08] hover:border-white/25',
+                  g.kind === 'song' ? 'bg-blue-600/10' : 'bg-purple-600/10',
+                )}
+                style={{ width: `${CELL_W}px`, minWidth: `${CELL_W}px`, height: `${Math.round(CELL_W * 9 / 16) + 22}px` }}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-1 px-1.5 pt-1.5">
+                  {g.kind === 'song'
+                    ? <Music size={9} className="text-blue-300 shrink-0" />
+                    : <BookOpen size={9} className="text-purple-300 shrink-0" />}
+                  <span className="text-[9px] font-bold text-white/80 truncate">{g.title}</span>
+                </div>
+                {/* Body */}
+                <p className="px-1.5 pt-0.5 text-[8px] text-white/45 leading-tight line-clamp-2 flex-1">{g.body}</p>
+                {/* Footer */}
+                <div className="px-1.5 pb-1 flex items-center gap-1">
+                  <span className="text-[7px] text-white/30 truncate">{g.subtitle}</span>
+                  <div className="flex-1" />
+                  <Send size={8} className="text-white/25 group-hover:text-purple-300 transition-colors" />
+                </div>
+
+                {/* Source number */}
+                <div className="absolute top-1 right-1 w-4 h-4 rounded bg-black/40 flex items-center justify-center">
+                  <span className="text-[8px] font-bold text-white/40">{idx + 1}</span>
+                </div>
+
+                {/* PGM / PVW badge */}
+                {isPgm && (
+                  <div className="absolute bottom-1 right-1 px-1 py-0.5 rounded-sm bg-red-500 text-[7px] font-bold text-white flex items-center gap-0.5">
+                    <span className="w-1 h-1 rounded-full bg-white animate-pulse" /> PGM
+                  </div>
+                )}
+                {isPvw && !isPgm && (
+                  <div className="absolute bottom-1 right-1 px-1 py-0.5 rounded-sm bg-emerald-500 text-[7px] font-bold text-white">PVW</div>
+                )}
+
+                {/* Remove */}
+                <button
+                  onClick={e => { e.stopPropagation(); removeGraphic(g.id) }}
+                  className="absolute top-1 left-1 w-5 h-5 rounded bg-black/60 text-white/30 hover:text-red-400 items-center justify-center hidden group-hover:flex transition-all z-10">
+                  <X size={8} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Thumbnail strip */}
+      {tab !== 'graphics' && (
       <div className="flex items-start gap-1.5 px-2 py-1.5 overflow-x-auto flex-1">
         {tabSources.map((src, idx) => {
           const stream = getStream(src.id)
@@ -219,6 +302,7 @@ export function SourceGrid() {
           </div>
         ))}
       </div>
+      )}
 
       <input ref={fileRef} type="file" accept="video/*,audio/*" className="hidden" onChange={handleFile} />
     </div>

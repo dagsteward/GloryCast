@@ -3,15 +3,46 @@ import { motion } from 'framer-motion'
 import {
   Radio, Wifi, Cpu, Activity, Scissors, TrendingDown,
   Move, Maximize2, ExternalLink, BookOpen, ChevronLeft,
-  ChevronRight, Eye, Users, Clock, Zap,
+  ChevronRight, Eye, Users, Clock, Zap, Music,
 } from 'lucide-react'
 import { useMediaEngine, getStream } from '../hooks/useMediaEngine'
 import { AudioMixer } from '../components/production/AudioMixer'
 import { StreamControls } from '../components/production/StreamControls'
 import { SourceGrid } from '../components/production/SourceGrid'
 import { CopilotFeed } from '../components/live/CopilotFeed'
-import { useServiceStore } from '../stores/serviceStore'
+import { useServiceStore, type LiveItem } from '../stores/serviceStore'
 import { cn } from '../lib/utils'
+
+// ─── GraphicOverlay ─────────────────────────────────────────────────────────
+// Renders the live scripture/song graphic (the serviceStore bus) composited as
+// a lower-third on top of the camera video. This is what visually unifies the
+// two buses: the PROGRAM monitor shows the program graphic, PREVIEW shows the
+// previewed graphic.
+
+function GraphicOverlay({ item, variant }: { item: LiveItem | null; variant: 'program' | 'preview' }) {
+  if (!item || item.kind === 'blank') return null
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-20 p-3 pointer-events-none">
+      <div className={cn(
+        'rounded-lg backdrop-blur-md border px-3.5 py-2.5 max-w-[82%]',
+        variant === 'program'
+          ? 'bg-black/72 border-red-500/40'
+          : 'bg-black/55 border-emerald-500/40',
+      )}>
+        <div className="flex items-center gap-1.5 mb-1">
+          {item.kind === 'song'
+            ? <Music size={11} className="text-blue-300 shrink-0" />
+            : <BookOpen size={11} className="text-purple-300 shrink-0" />}
+          <span className="text-[11px] font-bold text-white tracking-wide truncate">{item.title}</span>
+          {item.subtitle && <span className="text-[9px] text-white/45 shrink-0">{item.subtitle}</span>}
+        </div>
+        {item.body && (
+          <p className="text-[12px] text-white/85 leading-snug line-clamp-3">{item.body}</p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ─── VideoPanel ───────────────────────────────────────────────────────────────
 // Renders a live MediaStream into a <video> element.
@@ -146,17 +177,27 @@ const TRANSITION_ICONS: Record<TransitionType, React.ReactNode> = {
 
 function TransitionPanel() {
   const { previewId, cutToProgram } = useMediaEngine()
+  const gfxPreview = useServiceStore(s => s.preview)
+  const takeGraphic = useServiceStore(s => s.take)
   const [type,     setType]     = useState<TransitionType>('cut')
   const [duration, setDuration] = useState(1.0)
   const [fading,   setFading]   = useState(false)
 
+  // A TAKE promotes BOTH layers at once: the video bus (camera) and the
+  // graphics bus (scripture/song). Either or both may have something queued.
+  const canTake = !!previewId || !!gfxPreview
+
   function handleTake() {
-    if (!previewId) return
+    if (!canTake) return
+    const fire = () => {
+      if (previewId)  cutToProgram()  // video layer
+      if (gfxPreview) takeGraphic()   // graphics layer
+    }
     if (type === 'cut') {
-      cutToProgram()
+      fire()
     } else {
       setFading(true)
-      setTimeout(() => { cutToProgram(); setFading(false) }, duration * 1000)
+      setTimeout(() => { fire(); setFading(false) }, duration * 1000)
     }
   }
 
@@ -197,10 +238,10 @@ function TransitionPanel() {
       <motion.button
         whileTap={{ scale: 0.97 }}
         onClick={handleTake}
-        disabled={!previewId || fading}
+        disabled={!canTake || fading}
         className={cn(
           'w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all',
-          previewId && !fading
+          canTake && !fading
             ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]'
             : 'bg-white/[0.05] text-white/20 cursor-not-allowed',
         )}>
@@ -375,7 +416,9 @@ function openOutputWindow(sourceId: string | null) {
 // ─── ProductionPage ────────────────────────────────────────────────────────────
 
 export function ProductionPage() {
-  const { sources, previewId, programId, assignToPreview, assignToProgram, cutToProgram } = useMediaEngine()
+  const { sources, previewId, programId } = useMediaEngine()
+  const gfxProgram = useServiceStore(s => s.program)
+  const gfxPreview = useServiceStore(s => s.preview)
   const [aiCollapsed, setAiCollapsed] = useState(false)
 
   // Simulated master level for program VU bars (bounces with activity)
@@ -408,6 +451,9 @@ export function ProductionPage() {
           <div className="flex-[3] relative min-w-0 flex flex-col gap-0">
             <div className="flex-1 relative">
               <VideoPanel sourceId={programId} variant="program" className="h-full" />
+
+              {/* Live scripture/song graphic, composited over the video */}
+              <GraphicOverlay item={gfxProgram} variant="program" />
 
               {/* LIVE badge */}
               <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-1 rounded bg-red-500 text-[10px] font-bold text-white tracking-widest z-10">
@@ -444,6 +490,9 @@ export function ProductionPage() {
             {/* PREVIEW monitor (top of right column) */}
             <div className="flex-1 relative">
               <VideoPanel sourceId={previewId} variant="preview" className="h-full" />
+
+              {/* Previewed scripture/song graphic */}
+              <GraphicOverlay item={gfxPreview} variant="preview" />
 
               {/* PREVIEW badge */}
               <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-[9px] font-bold text-white tracking-widest z-10">
