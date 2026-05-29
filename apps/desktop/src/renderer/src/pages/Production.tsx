@@ -14,30 +14,68 @@ import { useServiceStore, type LiveItem } from '../stores/serviceStore'
 import { cn } from '../lib/utils'
 
 // ─── GraphicOverlay ─────────────────────────────────────────────────────────
-// Renders the live scripture/song graphic (the serviceStore bus) composited as
-// a lower-third on top of the camera video. This is what visually unifies the
-// two buses: the PROGRAM monitor shows the program graphic, PREVIEW shows the
-// previewed graphic.
+// Renders the live scripture/song graphic (the serviceStore bus) over a monitor.
+// Two modes:
+//   • lower-third  — composited at the bottom over a live camera feed.
+//   • full slide   — when there is no video source behind it, the verse fills
+//                    the monitor as a standalone scripture slide so the producer
+//                    can display scripture fully without a background.
+// In both modes the full verse is shown (never truncated).
 
-function GraphicOverlay({ item, variant }: { item: LiveItem | null; variant: 'program' | 'preview' }) {
+function GraphicOverlay({
+  item,
+  variant,
+  fullScreen,
+}: {
+  item: LiveItem | null
+  variant: 'program' | 'preview'
+  fullScreen: boolean
+}) {
   if (!item || item.kind === 'blank') return null
+
+  const Icon = item.kind === 'song' ? Music : BookOpen
+  const iconColor = item.kind === 'song' ? 'text-blue-300' : 'text-purple-300'
+
+  // ── Full scripture slide (no background video) ──
+  if (fullScreen) {
+    return (
+      <div className={cn(
+        'absolute inset-0 z-20 flex flex-col items-center justify-center text-center pointer-events-none',
+        'px-10 py-10 overflow-hidden',
+        variant === 'program'
+          ? 'bg-gradient-to-b from-[#0b0214] via-[#13061f] to-black'
+          : 'bg-gradient-to-b from-[#06120d] via-[#08160f] to-black',
+      )}>
+        <div className="flex items-center gap-2 mb-5">
+          <Icon size={16} className={cn(iconColor, 'shrink-0')} />
+          <span className="text-base font-bold text-white tracking-wide">{item.title}</span>
+          {item.subtitle && <span className="text-xs text-white/45">{item.subtitle}</span>}
+        </div>
+        {item.body && (
+          <p className="max-w-3xl w-full text-white/95 text-2xl leading-relaxed font-light max-h-full overflow-y-auto">
+            {item.body}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // ── Lower-third over a live camera feed (full verse, never clamped) ──
   return (
     <div className="absolute inset-x-0 bottom-0 z-20 p-3 pointer-events-none">
       <div className={cn(
-        'rounded-lg backdrop-blur-md border px-3.5 py-2.5 max-w-[82%]',
+        'rounded-lg backdrop-blur-md border px-3.5 py-2.5 max-w-[88%] max-h-[60%] overflow-y-auto',
         variant === 'program'
           ? 'bg-black/72 border-red-500/40'
           : 'bg-black/55 border-emerald-500/40',
       )}>
         <div className="flex items-center gap-1.5 mb-1">
-          {item.kind === 'song'
-            ? <Music size={11} className="text-blue-300 shrink-0" />
-            : <BookOpen size={11} className="text-purple-300 shrink-0" />}
+          <Icon size={11} className={cn(iconColor, 'shrink-0')} />
           <span className="text-[11px] font-bold text-white tracking-wide truncate">{item.title}</span>
           {item.subtitle && <span className="text-[9px] text-white/45 shrink-0">{item.subtitle}</span>}
         </div>
         {item.body && (
-          <p className="text-[12px] text-white/85 leading-snug line-clamp-3">{item.body}</p>
+          <p className="text-[12px] text-white/85 leading-snug">{item.body}</p>
         )}
       </div>
     </div>
@@ -452,8 +490,8 @@ export function ProductionPage() {
             <div className="flex-1 relative">
               <VideoPanel sourceId={programId} variant="program" className="h-full" />
 
-              {/* Live scripture/song graphic, composited over the video */}
-              <GraphicOverlay item={gfxProgram} variant="program" />
+              {/* Live scripture/song graphic — full slide when no video, else lower-third */}
+              <GraphicOverlay item={gfxProgram} variant="program" fullScreen={!programId} />
 
               {/* LIVE badge */}
               <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-1 rounded bg-red-500 text-[10px] font-bold text-white tracking-widest z-10">
@@ -491,8 +529,8 @@ export function ProductionPage() {
             <div className="flex-1 relative">
               <VideoPanel sourceId={previewId} variant="preview" className="h-full" />
 
-              {/* Previewed scripture/song graphic */}
-              <GraphicOverlay item={gfxPreview} variant="preview" />
+              {/* Previewed scripture/song graphic — full slide when no video, else lower-third */}
+              <GraphicOverlay item={gfxPreview} variant="preview" fullScreen={!previewId} />
 
               {/* PREVIEW badge */}
               <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-[9px] font-bold text-white tracking-widest z-10">
