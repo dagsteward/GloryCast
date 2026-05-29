@@ -18,6 +18,11 @@ import {
 // Every page then reads serviceStore — no page runs its own recognition.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Translation used for AI-detected scripture lookups + the badge shown on cards.
+// All 10 Power Bible translations are imported (KJV, NIV, ESV, NKJV, NLT, GNT,
+// MSG, TLB, TPT, TK); change this one constant to switch the Copilot default.
+const COPILOT_TRANSLATION = 'NIV'
+
 export function useAiCopilot() {
   const aiListening  = useServiceStore(s => s.aiListening)
   const setTranscript = useServiceStore(s => s.setTranscript)
@@ -88,12 +93,12 @@ export function useAiCopilot() {
       const scriptureHits = detectScripture(windowText, seenScriptureRef.current)
       for (const hit of scriptureHits) {
         void (async () => {
-          const text = await fetchVerseText(hit.book, hit.chapter, hit.verse)
+          const text = await fetchVerseText(hit.book, hit.chapter, hit.verse, COPILOT_TRANSLATION)
           addDetection({
             kind:       'scripture',
             reference:  hit.reference,
             text:       text || '(verse text unavailable — open Bible page)',
-            subtitle:   'NIV',
+            subtitle:   COPILOT_TRANSLATION,
             confidence: hit.confidence,
           })
         })()

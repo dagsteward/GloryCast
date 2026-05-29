@@ -94,7 +94,7 @@ export function detectScripture(text: string, seen: Set<string>): ScriptureHit[]
   return results
 }
 
-/** Fetch verse text from the local backend (NIV by default). */
+/** Fetch verse text from the local backend. Defaults to the church translation (NIV). */
 export async function fetchVerseText(
   book: string,
   chapter: number,
