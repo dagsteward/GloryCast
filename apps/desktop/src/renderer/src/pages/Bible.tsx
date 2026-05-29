@@ -11,6 +11,9 @@ import { cn } from '../lib/utils'
 import { LowerThird } from '../components/bible/LowerThird'
 import type { LowerThirdStyle } from '../components/bible/LowerThird'
 import { useServiceStore, type LiveItem } from '../stores/serviceStore'
+import { BackgroundPicker } from '../components/bible/BackgroundPicker'
+import { SlideBackdrop } from '../components/bible/SlideBackdrop'
+import { useBackgroundStore } from '../stores/backgroundStore'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +32,7 @@ interface QueueItem {
   secondaryText?: string
   secondaryTranslation?: string
   style: LowerThirdStyle
+  background: string
   state: 'prepared' | 'preview' | 'program'
   timestamp: number
 }
@@ -285,6 +289,9 @@ export function BiblePage() {
   const gfxToProgram   = useServiceStore(s => s.cutToProgram)
   const gfxClearProgram = useServiceStore(s => s.clearProgram)
 
+  // Selected slide background (shared registry — gradients, motion, uploads).
+  const selectedBg = useBackgroundStore(s => s.selectedId)
+
   const verses           = getVerses(selectedBook.name, selectedChapter)
   const bookmarkKey      = (v: number) => `${selectedBook.name}:${selectedChapter}:${v}`
   const selectedVerseData = verses.find(v => v.verse === selectedVerse)
@@ -349,13 +356,14 @@ export function BiblePage() {
   // Map a Bible queue item to the shared LiveItem graphic-bus shape.
   function toLiveItem(item: QueueItem): Omit<LiveItem, 'id'> {
     return {
-      kind:     'scripture',
-      title:    `${item.book} ${item.chapter}:${item.verse}`,
-      body:     item.primaryText,
-      subtitle: item.secondaryTranslation
+      kind:       'scripture',
+      title:      `${item.book} ${item.chapter}:${item.verse}`,
+      body:       item.primaryText,
+      subtitle:   item.secondaryTranslation
         ? `${item.primaryTranslation} + ${item.secondaryTranslation}`
         : item.primaryTranslation,
-      source:   'bible',
+      background: item.background,
+      source:     'bible',
     }
   }
 
@@ -376,6 +384,7 @@ export function BiblePage() {
       secondaryText,
       secondaryTranslation: dualMode ? secondaryTx : undefined,
       style:               ltStyle,
+      background:          selectedBg,
       state:               'prepared',
       timestamp:           Date.now(),
     }
@@ -747,12 +756,18 @@ export function BiblePage() {
                 </button>
               </div>
 
-              {/* LT preview */}
+              {/* Background chooser (gradients, motion graphics, custom uploads) */}
+              <BackgroundPicker />
+
+              {/* LT preview — verse composited over the selected background */}
               <AnimatePresence>
                 {showLtPreview && ltPreviewData && (
                   <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }}
                     className="overflow-hidden">
-                    <LowerThird style={ltStyle} {...ltPreviewData} />
+                    <div className="relative aspect-video rounded-xl overflow-hidden bg-black">
+                      <SlideBackdrop bgId={selectedBg} />
+                      <LowerThird style={ltStyle} fullBleed {...ltPreviewData} />
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>

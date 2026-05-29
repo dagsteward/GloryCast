@@ -10,7 +10,12 @@ import { create } from 'zustand'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SourceType = 'camera' | 'screen' | 'media' | 'pattern'
+export type SourceType =
+  | 'camera' | 'screen' | 'media' | 'pattern'
+  | 'ndi' | 'obs' | 'vmix' | 'network'
+
+/** Sources fed over the network (OBS / vMix / NDI / RTMP-SRT-HLS relays). */
+export type NetworkProtocol = 'ndi' | 'obs' | 'vmix' | 'rtmp' | 'srt' | 'hls' | 'whep'
 
 export interface MediaSourceMeta {
   id: string
@@ -20,6 +25,10 @@ export interface MediaSourceMeta {
   active: boolean
   hasVideo: boolean
   hasAudio: boolean
+  /** For network sources — connection target + live status. */
+  protocol?: NetworkProtocol
+  url?: string
+  status?: 'connecting' | 'live' | 'offline'
 }
 
 export interface AppearanceConfig {
@@ -146,7 +155,12 @@ interface MediaEngineState {
   addScreenSource:   () => Promise<string | null>
   addMediaFile:      (file: File) => string
   addTestPattern:    () => string
+  /** Add an OBS / vMix / NDI / network source. Tries to attach a live stream
+   *  from `url` when one is given (HTTP/MJPEG/MP4/WebM playable by <video>). */
+  addNetworkSource:  (opts: { protocol: NetworkProtocol; url?: string; label?: string }) => string
   removeSource:      (id: string) => void
+  /** Reorder the source pool — drag one source onto another's slot. */
+  reorderSources:    (fromId: string, toId: string) => void
   assignToPreview:   (id: string) => void
   assignToProgram:   (id: string) => void
   cutToProgram:      () => void
@@ -280,6 +294,63 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
       return id
     },
 
+    // ── addNetworkSource (OBS / vMix / NDI / RTMP-SRT-HLS) ───────────────────
+    addNetworkSource: ({ protocol, url, label }) => {
+      const id = uid(protocol)
+      const type: SourceType =
+        protocol === 'ndi'  ? 'ndi'  :
+        protocol === 'obs'  ? 'obs'  :
+        protocol === 'vmix' ? 'vmix' : 'network'
+
+      const defaultLabel: Record<NetworkProtocol, string> = {
+        ndi: 'NDI Source', obs: 'OBS Studio', vmix: 'vMix',
+        rtmp: 'RTMP Source', srt: 'SRT Source', hls: 'HLS Source', whep: 'WebRTC Source',
+      }
+
+      // Add the metadata immediately so the source shows in the deck while it
+      // negotiates a connection.
+      set(s => ({
+        sources: [...s.sources, {
+          id, label: label?.trim() || defaultLabel[protocol], type, protocol, url,
+          active: false, hasVideo: true, hasAudio: true,
+          status: url ? 'connecting' : 'offline',
+        }],
+      }))
+
+      // When a directly-playable URL is supplied (vMix HTTP/MJPEG output, an
+      // MP4/WebM relay, or a gateway HLS endpoint), attach a live <video> and
+      // capture its frames into a MediaStream. Protocols that need a native
+      // bridge (raw NDI, SRT) stay as a metadata-only slot until the bridge
+      // feeds them a playable URL.
+      if (url) {
+        const video = document.createElement('video')
+        video.src = url
+        video.crossOrigin = 'anonymous'
+        video.loop = true
+        video.muted = false
+        video.playsInline = true
+
+        const markLive = () => {
+          const stream: MediaStream | null = (video as any).captureStream?.(30) ?? null
+          if (stream) _streams.set(id, stream)
+          set(s => ({
+            sources: s.sources.map(src =>
+              src.id === id ? { ...src, active: !!stream, status: stream ? 'live' : 'offline' } : src),
+          }))
+        }
+        const markOffline = () => set(s => ({
+          sources: s.sources.map(src => src.id === id ? { ...src, active: false, status: 'offline' } : src),
+        }))
+
+        video.addEventListener('canplay', markLive, { once: true })
+        video.addEventListener('error', markOffline, { once: true })
+        video.play().catch(() => {})
+        _mediaVideos.set(id, video)
+      }
+
+      return id
+    },
+
     // ── removeSource ────────────────────────────────────────────────────────
     removeSource: (id) => {
       const stream = _streams.get(id)
@@ -296,6 +367,18 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
         programId: s.programId === id ? null : s.programId,
       }))
     },
+
+    // ── reorderSources ──────────────────────────────────────────────────────
+    reorderSources: (fromId, toId) => set(s => {
+      if (fromId === toId) return {}
+      const list = [...s.sources]
+      const from = list.findIndex(src => src.id === fromId)
+      const to   = list.findIndex(src => src.id === toId)
+      if (from === -1 || to === -1) return {}
+      const [moved] = list.splice(from, 1)
+      list.splice(to, 0, moved)
+      return { sources: list }
+    }),
 
     // ── Bus assignments ─────────────────────────────────────────────────────
     assignToPreview:  (id) => set({ previewId: id }),

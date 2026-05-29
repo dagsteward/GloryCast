@@ -16,6 +16,15 @@ import { devtools } from 'zustand/middleware'
 
 export type LiveItemKind = 'scripture' | 'song' | 'announcement' | 'media' | 'blank'
 
+/**
+ * How a scripture / song graphic is composited over the program output.
+ *  • lower-third — classic broadcast band pinned to the bottom
+ *  • top         — band pinned to the top
+ *  • center / left / right — a positioned card over the video
+ *  • full        — full-screen slide with its chosen background
+ */
+export type OverlayLayout = 'lower-third' | 'top' | 'center' | 'left' | 'right' | 'full'
+
 /** A thing that can sit on Preview or Program — the shared output unit. */
 export interface LiveItem {
   id:          string
@@ -65,6 +74,9 @@ interface ServiceState {
   program:  LiveItem | null
   history:  LiveItem[]           // things that have gone live, newest first
 
+  // How graphics are composited over the program / preview output.
+  overlayLayout: OverlayLayout
+
   // ── Graphics deck ──────────────────────────────────────────────────
   // Prepared graphic sources (scripture verses, songs, announcements) that
   // can be switched like any other source. The Bible page queues into here;
@@ -95,12 +107,15 @@ interface ServiceState {
   cutToProgram: (item: Omit<LiveItem, 'id'>) => void
   clearProgram: () => void
   clearPreview: () => void
+  setOverlayLayout: (layout: OverlayLayout) => void
 
   // ── Actions: graphics deck ─────────────────────────────────────────
   /** Add a graphic source to the switch deck (deduped by title). Returns its id. */
   addGraphic: (item: Omit<LiveItem, 'id'>) => string
   removeGraphic: (id: string) => void
   clearGraphics: () => void
+  /** Reorder the graphics deck — drag a source onto another's slot. */
+  reorderGraphics: (fromId: string, toId: string) => void
 }
 
 const AUTO_PILOT_THRESHOLD = 0.88
@@ -137,6 +152,7 @@ export const useServiceStore = create<ServiceState>()(
       preview: null,
       program: null,
       history: [],
+      overlayLayout: 'lower-third',
 
       // ── Graphics deck ──
       graphics: [],
@@ -240,6 +256,7 @@ export const useServiceStore = create<ServiceState>()(
 
       clearProgram: () => set({ program: null }, false, 'clearProgram'),
       clearPreview: () => set({ preview: null }, false, 'clearPreview'),
+      setOverlayLayout: (layout) => set({ overlayLayout: layout }, false, 'setOverlayLayout'),
 
       // ── Graphics deck actions ──
       addGraphic: (item) => {
@@ -257,6 +274,17 @@ export const useServiceStore = create<ServiceState>()(
       }), false, 'removeGraphic'),
 
       clearGraphics: () => set({ graphics: [] }, false, 'clearGraphics'),
+
+      reorderGraphics: (fromId, toId) => set((s) => {
+        if (fromId === toId) return {}
+        const list = [...s.graphics]
+        const from = list.findIndex(g => g.id === fromId)
+        const to   = list.findIndex(g => g.id === toId)
+        if (from === -1 || to === -1) return {}
+        const [moved] = list.splice(from, 1)
+        list.splice(to, 0, moved)
+        return { graphics: list }
+      }, false, 'reorderGraphics'),
     }),
     { name: 'GloryCast/Service' },
   ),

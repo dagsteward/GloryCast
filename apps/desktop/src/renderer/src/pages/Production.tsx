@@ -1,82 +1,139 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Radio, Wifi, Cpu, Activity, Scissors, TrendingDown,
+  Radio, Wifi, Cpu, Scissors, TrendingDown,
   Move, Maximize2, ExternalLink, BookOpen, ChevronLeft,
   ChevronRight, Eye, Users, Clock, Zap, Music,
+  PanelTop, PanelBottom, PanelLeft, PanelRight, Square,
 } from 'lucide-react'
 import { useMediaEngine, getStream } from '../hooks/useMediaEngine'
 import { AudioMixer } from '../components/production/AudioMixer'
 import { StreamControls } from '../components/production/StreamControls'
 import { SourceGrid } from '../components/production/SourceGrid'
 import { CopilotFeed } from '../components/live/CopilotFeed'
-import { useServiceStore, type LiveItem } from '../stores/serviceStore'
+import { useServiceStore, type LiveItem, type OverlayLayout } from '../stores/serviceStore'
+import { SlideBackdrop } from '../components/bible/SlideBackdrop'
 import { cn } from '../lib/utils'
 
 // ─── GraphicOverlay ─────────────────────────────────────────────────────────
 // Renders the live scripture/song graphic (the serviceStore bus) over a monitor.
-// Two modes:
-//   • lower-third  — composited at the bottom over a live camera feed.
-//   • full slide   — when there is no video source behind it, the verse fills
-//                    the monitor as a standalone scripture slide so the producer
-//                    can display scripture fully without a background.
-// In both modes the full verse is shown (never truncated).
+// The producer chooses how it composites via the overlay layout picker:
+//   • lower-third / top — a broadcast band pinned to an edge.
+//   • center / left / right — a positioned card over the live video.
+//   • full — a full-screen scripture slide with its chosen background.
+// When no video source sits behind the graphic, the chosen slide background is
+// painted so positioned overlays remain legible instead of floating on black.
+// The full verse is always shown (never truncated).
+
+const LAYOUT_ALIGN: Record<Exclude<OverlayLayout, 'full'>, string> = {
+  'lower-third': 'items-end justify-center',
+  top:           'items-start justify-center',
+  center:        'items-center justify-center',
+  left:          'items-center justify-start',
+  right:         'items-center justify-end',
+}
 
 function GraphicOverlay({
   item,
   variant,
-  fullScreen,
+  hasVideo,
+  layout,
 }: {
   item: LiveItem | null
   variant: 'program' | 'preview'
-  fullScreen: boolean
+  hasVideo: boolean
+  layout: OverlayLayout
 }) {
   if (!item || item.kind === 'blank') return null
 
   const Icon = item.kind === 'song' ? Music : BookOpen
   const iconColor = item.kind === 'song' ? 'text-blue-300' : 'text-purple-300'
 
-  // ── Full scripture slide (no background video) ──
-  if (fullScreen) {
+  // ── Full scripture slide ──
+  if (layout === 'full') {
     return (
-      <div className={cn(
-        'absolute inset-0 z-20 flex flex-col items-center justify-center text-center pointer-events-none',
-        'px-10 py-10 overflow-hidden',
-        variant === 'program'
-          ? 'bg-gradient-to-b from-[#0b0214] via-[#13061f] to-black'
-          : 'bg-gradient-to-b from-[#06120d] via-[#08160f] to-black',
-      )}>
-        <div className="flex items-center gap-2 mb-5">
-          <Icon size={16} className={cn(iconColor, 'shrink-0')} />
-          <span className="text-base font-bold text-white tracking-wide">{item.title}</span>
-          {item.subtitle && <span className="text-xs text-white/45">{item.subtitle}</span>}
+      <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+        <SlideBackdrop bgId={item.background} />
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-10 py-10">
+          <div className="flex items-center gap-2 mb-5">
+            <Icon size={16} className={cn(iconColor, 'shrink-0')} />
+            <span className="text-base font-bold text-white tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">{item.title}</span>
+            {item.subtitle && <span className="text-xs text-white/60 drop-shadow">{item.subtitle}</span>}
+          </div>
+          {item.body && (
+            <p className="max-w-3xl w-full text-white text-2xl leading-relaxed font-light max-h-full overflow-y-auto drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+              {item.body}
+            </p>
+          )}
         </div>
-        {item.body && (
-          <p className="max-w-3xl w-full text-white/95 text-2xl leading-relaxed font-light max-h-full overflow-y-auto">
-            {item.body}
-          </p>
-        )}
       </div>
     )
   }
 
-  // ── Lower-third over a live camera feed (full verse, never clamped) ──
+  // ── Positioned card (lower-third / top / center / left / right) ──
+  const edgeBand = layout === 'lower-third' || layout === 'top'
+
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 p-3 pointer-events-none">
-      <div className={cn(
-        'rounded-lg backdrop-blur-md border px-3.5 py-2.5 max-w-[88%] max-h-[60%] overflow-y-auto',
-        variant === 'program'
-          ? 'bg-black/72 border-red-500/40'
-          : 'bg-black/55 border-emerald-500/40',
-      )}>
-        <div className="flex items-center gap-1.5 mb-1">
-          <Icon size={11} className={cn(iconColor, 'shrink-0')} />
-          <span className="text-[11px] font-bold text-white tracking-wide truncate">{item.title}</span>
-          {item.subtitle && <span className="text-[9px] text-white/45 shrink-0">{item.subtitle}</span>}
+    <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+      {/* Paint the slide background only when no live video sits behind it. */}
+      {!hasVideo && <SlideBackdrop bgId={item.background} />}
+      <div className={cn('absolute inset-0 flex p-3', LAYOUT_ALIGN[layout])}>
+        <div className={cn(
+          'rounded-lg backdrop-blur-md border px-3.5 py-2.5 max-h-[72%] overflow-y-auto drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]',
+          edgeBand ? 'w-[88%]' : 'max-w-[58%]',
+          variant === 'program'
+            ? 'bg-black/72 border-red-500/40'
+            : 'bg-black/55 border-emerald-500/40',
+        )}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <Icon size={11} className={cn(iconColor, 'shrink-0')} />
+            <span className="text-[11px] font-bold text-white tracking-wide truncate">{item.title}</span>
+            {item.subtitle && <span className="text-[9px] text-white/45 shrink-0">{item.subtitle}</span>}
+          </div>
+          {item.body && (
+            <p className="text-[12px] text-white/85 leading-snug">{item.body}</p>
+          )}
         </div>
-        {item.body && (
-          <p className="text-[12px] text-white/85 leading-snug">{item.body}</p>
-        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── OverlayLayoutPicker ──────────────────────────────────────────────────────
+// Lets the producer choose how scripture/song graphics composite over output.
+
+const OVERLAY_OPTIONS: { id: OverlayLayout; label: string; icon: React.ReactNode }[] = [
+  { id: 'lower-third', label: 'Lower',  icon: <PanelBottom size={11} /> },
+  { id: 'top',         label: 'Top',    icon: <PanelTop size={11} /> },
+  { id: 'left',        label: 'Left',   icon: <PanelLeft size={11} /> },
+  { id: 'center',      label: 'Center', icon: <Square size={11} /> },
+  { id: 'right',       label: 'Right',  icon: <PanelRight size={11} /> },
+  { id: 'full',        label: 'Full',   icon: <Maximize2 size={11} /> },
+]
+
+function OverlayLayoutPicker() {
+  const layout    = useServiceStore(s => s.overlayLayout)
+  const setLayout = useServiceStore(s => s.setOverlayLayout)
+
+  return (
+    <div className="shrink-0 bg-chrome rounded-xl border border-white/[0.06] p-2">
+      <div className="flex items-center gap-1 mb-1.5">
+        <Move size={9} className="text-white/30" />
+        <span className="text-[9px] text-white/35 uppercase tracking-widest">Overlay Position</span>
+      </div>
+      <div className="grid grid-cols-6 gap-1">
+        {OVERLAY_OPTIONS.map(o => (
+          <button key={o.id} onClick={() => setLayout(o.id)} title={`${o.label} overlay`}
+            className={cn(
+              'flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-[8px] font-semibold transition-colors',
+              layout === o.id
+                ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
+                : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04] border border-transparent',
+            )}>
+            {o.icon}
+            {o.label}
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -455,8 +512,9 @@ function openOutputWindow(sourceId: string | null) {
 
 export function ProductionPage() {
   const { sources, previewId, programId } = useMediaEngine()
-  const gfxProgram = useServiceStore(s => s.program)
-  const gfxPreview = useServiceStore(s => s.preview)
+  const gfxProgram    = useServiceStore(s => s.program)
+  const gfxPreview    = useServiceStore(s => s.preview)
+  const overlayLayout = useServiceStore(s => s.overlayLayout)
   const [aiCollapsed, setAiCollapsed] = useState(false)
 
   // Simulated master level for program VU bars (bounces with activity)
@@ -490,8 +548,8 @@ export function ProductionPage() {
             <div className="flex-1 relative">
               <VideoPanel sourceId={programId} variant="program" className="h-full" />
 
-              {/* Live scripture/song graphic — full slide when no video, else lower-third */}
-              <GraphicOverlay item={gfxProgram} variant="program" fullScreen={!programId} />
+              {/* Live scripture/song graphic — composited per the chosen overlay layout */}
+              <GraphicOverlay item={gfxProgram} variant="program" hasVideo={!!programId} layout={overlayLayout} />
 
               {/* LIVE badge */}
               <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-1 rounded bg-red-500 text-[10px] font-bold text-white tracking-widest z-10">
@@ -529,8 +587,8 @@ export function ProductionPage() {
             <div className="flex-1 relative">
               <VideoPanel sourceId={previewId} variant="preview" className="h-full" />
 
-              {/* Previewed scripture/song graphic — full slide when no video, else lower-third */}
-              <GraphicOverlay item={gfxPreview} variant="preview" fullScreen={!previewId} />
+              {/* Previewed scripture/song graphic — composited per the chosen overlay layout */}
+              <GraphicOverlay item={gfxPreview} variant="preview" hasVideo={!!previewId} layout={overlayLayout} />
 
               {/* PREVIEW badge */}
               <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-[9px] font-bold text-white tracking-widest z-10">
@@ -543,7 +601,8 @@ export function ProductionPage() {
               </div>
             </div>
 
-            {/* Transition controls */}
+            {/* Overlay position + transition controls */}
+            <OverlayLayoutPicker />
             <TransitionPanel />
           </div>
         </div>

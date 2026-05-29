@@ -294,3 +294,171 @@ body,
 .slide-bg-gold {
   background: linear-gradient(135deg, #292524 0%, #78350f 50%, #1c1917 100%);
 }
+
+/* ─── Native dropdowns ─────────────────────────────────────────────────────── */
+/* Electron/Chromium honours background-color + color on <option>, so the native
+   popup matches the app instead of defaulting to a white system list. */
+select {
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background-color: #14141d;
+  color: rgba(255, 255, 255, 0.88);
+}
+select optgroup {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 600;
+}
+.theme-light select {
+  color-scheme: light;
+}
+.theme-light select option,
+.theme-light select optgroup {
+  background-color: #ffffff;
+  color: rgba(0, 0, 0, 0.85);
+}
+.theme-light select optgroup {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* ─── Motion graphic backgrounds (animated gradients) ─────────────────────── */
+@keyframes gc-bg-pan {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.slide-motion-aurora,
+.slide-motion-ember,
+.slide-motion-ocean,
+.slide-motion-royal {
+  background-size: 300% 300%;
+  animation: gc-bg-pan 22s ease infinite;
+}
+.slide-motion-aurora { background-image: linear-gradient(120deg, #1a0533, #3b0764, #0c1445, #1e3a8a); }
+.slide-motion-ember  { background-image: linear-gradient(120deg, #431407, #9a3412, #7c2d12, #292524); }
+.slide-motion-ocean  { background-image: linear-gradient(120deg, #052e16, #14532d, #0c4a6e, #155e75); }
+.slide-motion-royal  { background-image: linear-gradient(120deg, #1e1b4b, #4c1d95, #312e81, #0f172a); }
+
+/* ═══ Light theme remaps ═══════════════════════════════════════════════════ */
+/* The pages use hardcoded text-white / border-white / bg-white utilities that
+   ignore the --gc-* tokens. Without these remaps the light theme is unreadable,
+   so we flip the neutral white-alpha scale to a dark-on-light scale. Saturated
+   colour buttons (solid bg-*-500/600) keep white text — re-asserted below. */
+
+/* Text — dark on light */
+.theme-light .text-white\/95 { color: rgba(0,0,0,0.92); }
+.theme-light .text-white\/90 { color: rgba(0,0,0,0.88); }
+.theme-light .text-white\/85 { color: rgba(0,0,0,0.84); }
+.theme-light .text-white\/80 { color: rgba(0,0,0,0.80); }
+.theme-light .text-white\/75 { color: rgba(0,0,0,0.74); }
+.theme-light .text-white\/72 { color: rgba(0,0,0,0.72); }
+.theme-light .text-white\/70 { color: rgba(0,0,0,0.70); }
+.theme-light .text-white\/65 { color: rgba(0,0,0,0.66); }
+.theme-light .text-white\/60 { color: rgba(0,0,0,0.62); }
+.theme-light .text-white\/55 { color: rgba(0,0,0,0.58); }
+.theme-light .text-white\/50 { color: rgba(0,0,0,0.54); }
+.theme-light .text-white\/45 { color: rgba(0,0,0,0.50); }
+.theme-light .text-white\/42 { color: rgba(0,0,0,0.48); }
+.theme-light .text-white\/40 { color: rgba(0,0,0,0.48); }
+.theme-light .text-white\/38 { color: rgba(0,0,0,0.46); }
+.theme-light .text-white\/35 { color: rgba(0,0,0,0.44); }
+.theme-light .text-white\/32 { color: rgba(0,0,0,0.42); }
+.theme-light .text-white\/30 { color: rgba(0,0,0,0.42); }
+.theme-light .text-white\/28 { color: rgba(0,0,0,0.40); }
+.theme-light .text-white\/25 { color: rgba(0,0,0,0.38); }
+.theme-light .text-white\/22 { color: rgba(0,0,0,0.36); }
+.theme-light .text-white\/20 { color: rgba(0,0,0,0.36); }
+.theme-light .text-white\/18 { color: rgba(0,0,0,0.34); }
+.theme-light .text-white\/15 { color: rgba(0,0,0,0.32); }
+.theme-light .text-white\/12 { color: rgba(0,0,0,0.30); }
+.theme-light .text-white\/10 { color: rgba(0,0,0,0.28); }
+
+/* Borders — dark on light */
+.theme-light .border-white\/\[0\.04\] { border-color: rgba(0,0,0,0.08); }
+.theme-light .border-white\/\[0\.05\] { border-color: rgba(0,0,0,0.09); }
+.theme-light .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.10); }
+.theme-light .border-white\/\[0\.07\] { border-color: rgba(0,0,0,0.11); }
+.theme-light .border-white\/\[0\.08\] { border-color: rgba(0,0,0,0.12); }
+.theme-light .border-white\/\[0\.1\]  { border-color: rgba(0,0,0,0.14); }
+.theme-light .border-white\/10 { border-color: rgba(0,0,0,0.12); }
+.theme-light .border-white\/12 { border-color: rgba(0,0,0,0.14); }
+.theme-light .border-white\/15 { border-color: rgba(0,0,0,0.16); }
+.theme-light .border-white\/20 { border-color: rgba(0,0,0,0.18); }
+.theme-light .border-white\/25 { border-color: rgba(0,0,0,0.20); }
+.theme-light .border-white\/30 { border-color: rgba(0,0,0,0.22); }
+.theme-light .border-white\/40 { border-color: rgba(0,0,0,0.28); }
+
+/* Background surfaces — subtle dark overlay on light */
+.theme-light .bg-white\/\[0\.02\]  { background-color: rgba(0,0,0,0.03); }
+.theme-light .bg-white\/\[0\.025\] { background-color: rgba(0,0,0,0.035); }
+.theme-light .bg-white\/\[0\.03\]  { background-color: rgba(0,0,0,0.04); }
+.theme-light .bg-white\/\[0\.04\]  { background-color: rgba(0,0,0,0.05); }
+.theme-light .bg-white\/\[0\.05\]  { background-color: rgba(0,0,0,0.06); }
+.theme-light .bg-white\/\[0\.06\]  { background-color: rgba(0,0,0,0.07); }
+.theme-light .bg-white\/\[0\.07\]  { background-color: rgba(0,0,0,0.08); }
+.theme-light .bg-white\/\[0\.09\]  { background-color: rgba(0,0,0,0.10); }
+.theme-light .bg-white\/\[0\.1\]   { background-color: rgba(0,0,0,0.11); }
+.theme-light .bg-white\/10 { background-color: rgba(0,0,0,0.08); }
+.theme-light .bg-white\/12 { background-color: rgba(0,0,0,0.10); }
+.theme-light .bg-white\/15 { background-color: rgba(0,0,0,0.12); }
+.theme-light .bg-white\/20 { background-color: rgba(0,0,0,0.14); }
+.theme-light .bg-white\/40 { background-color: rgba(0,0,0,0.20); }
+.theme-light .bg-white\/60 { background-color: rgba(0,0,0,0.30); }
+
+/* Hover surfaces */
+.theme-light .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0,0,0,0.05); }
+.theme-light .hover\:bg-white\/\[0\.05\]:hover { background-color: rgba(0,0,0,0.06); }
+.theme-light .hover\:bg-white\/\[0\.06\]:hover { background-color: rgba(0,0,0,0.07); }
+.theme-light .hover\:bg-white\/\[0\.07\]:hover { background-color: rgba(0,0,0,0.09); }
+.theme-light .hover\:bg-white\/\[0\.09\]:hover { background-color: rgba(0,0,0,0.11); }
+.theme-light .hover\:bg-white\/10:hover { background-color: rgba(0,0,0,0.08); }
+
+/* Placeholders */
+.theme-light input::placeholder,
+.theme-light textarea::placeholder { color: rgba(0,0,0,0.38); }
+
+/* Re-assert white text on solid accent buttons ([class~] matches the exact
+   solid token only, never the bg-*-600/10 alpha tints used by cards). */
+.theme-light [class~="bg-purple-600"],
+.theme-light [class~="bg-purple-500"],
+.theme-light [class~="bg-red-600"],
+.theme-light [class~="bg-red-500"],
+.theme-light [class~="bg-blue-600"],
+.theme-light [class~="bg-blue-500"],
+.theme-light [class~="bg-emerald-600"],
+.theme-light [class~="bg-emerald-500"],
+.theme-light [class~="bg-orange-600"],
+.theme-light [class~="bg-orange-500"] {
+  color: #fff;
+}
+
+/* Gradient-filled buttons keep their saturated fill in light theme, so their
+   white labels/icons must stay white (the [class*="from-*-6"] match targets the
+   600-weight gradient stops these buttons use, not card alpha tints). */
+.theme-light [class*="bg-gradient-to-"][class*="from-purple-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-violet-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-indigo-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-blue-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-red-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-orange-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-amber-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-emerald-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-green-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-pink-6"],
+.theme-light [class*="bg-gradient-to-"][class*="from-rose-6"] {
+  color: #fff;
+}
+.theme-light [class*="bg-gradient-to-"][class*="from-purple-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-violet-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-indigo-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-blue-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-red-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-orange-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-amber-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-emerald-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-green-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-pink-6"] *,
+.theme-light [class*="bg-gradient-to-"][class*="from-rose-6"] * {
+  color: inherit;
+}
