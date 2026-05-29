@@ -332,7 +332,7 @@ export function AudioMixer({ compact }: { compact?: boolean }) {
   const masterDisplay = masterMuted ? 0 : masterLevel
 
   return (
-    <div className="h-full flex flex-col bg-[#07070f]">
+    <div className="h-full flex flex-col bg-app">
       {/* Header */}
       <div className="flex items-center justify-between px-3 border-b border-white/[0.05] shrink-0" style={{ height: '26px' }}>
         <span className="text-[9px] font-semibold text-white/40 uppercase tracking-widest">Audio Mixer</span>

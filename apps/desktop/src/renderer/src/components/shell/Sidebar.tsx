@@ -26,7 +26,7 @@ export function Sidebar() {
   const groups = ['main', 'engage', 'ai', 'system']
 
   return (
-    <aside className="w-14 shrink-0 flex flex-col bg-[#090910] border-r border-white/[0.05] py-2">
+    <aside className="w-14 shrink-0 flex flex-col bg-chrome border-r border-white/[0.05] py-2">
 
       {/* Church logo */}
       <div className="px-2 mb-2 pb-2 border-b border-white/[0.05]">

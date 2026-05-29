@@ -143,6 +143,8 @@ Church: **Grace Community Church** (slug: `grace-community-church`)
 
 **CSS tokens** (in `globals.css`): `--gc-black`, `--gc-surface-1..4`, `--gc-purple`, `--gc-orange`, `--gc-text-*`, `--gc-glass`. Dynamic accent: `--accent` (RGB triplet, no `rgb()`).
 
+**Page background scale — use these, never ad-hoc `bg-[#0x0x0x]`:** `--gc-app` (page root canvas) and `--gc-chrome` (bars, headers, side rails, deep panels), surfaced as the `.bg-app` and `.bg-chrome` utilities. They are redefined under `.theme-dim` / `.theme-light`, so using them keeps every page theme-aware. Elevated cards use `.card-premium` / `.glass`.
+
 **Tailwind custom classes** (defined in `globals.css` `@layer components`):
 - `.card-premium` — frosted glass card with border
 - `.glass` — lighter glass surface

@@ -5,7 +5,8 @@ import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
 import { AppStore } from './store'
 
-process.env.DIST = join(__dirname, '../..')
+// __dirname is dist/main → DIST is the dist/ root (holds renderer/index.html).
+process.env.DIST = join(__dirname, '..')
 process.env.VITE_PUBLIC = app.isPackaged
   ? process.env.DIST
   : join(process.env.DIST, '../public')

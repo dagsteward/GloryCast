@@ -81,7 +81,7 @@ export function SourceGrid() {
   const PAD_CELLS = Math.max(0, 8 - tabSources.length)
 
   return (
-    <div className="flex flex-col bg-[#07070e] border-t border-white/[0.05] shrink-0" style={{ height: '140px' }}>
+    <div className="flex flex-col bg-chrome border-t border-white/[0.05] shrink-0" style={{ height: '140px' }}>
       {/* Tab header */}
       <div className="flex items-stretch border-b border-white/[0.05] shrink-0" style={{ height: '26px' }}>
         {TABS.map(t => (

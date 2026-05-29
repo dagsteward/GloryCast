@@ -70,7 +70,7 @@ export function AiStudioPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-white/[0.06] bg-[#0a0a12] shrink-0">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-white/[0.06] bg-chrome shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-orange-400" />
           <h2 className="text-sm font-semibold text-white/80">AI Content Studio</h2>

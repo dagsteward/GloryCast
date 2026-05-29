@@ -224,7 +224,7 @@ export function MultiView() {
       </div>
 
       {/* Switcher bar */}
-      <div className="shrink-0 flex items-center gap-3 px-3 py-2 bg-[#0a0a14] rounded-xl border border-white/[0.05]">
+      <div className="shrink-0 flex items-center gap-3 px-3 py-2 bg-chrome rounded-xl border border-white/[0.05]">
         {/* Transition mode */}
         <div className="flex gap-1">
           {(['cut','fade'] as Transition[]).map(t => (

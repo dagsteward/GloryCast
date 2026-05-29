@@ -79,7 +79,7 @@ function StatusBar() {
   const s = String(elapsed % 60).padStart(2, '0')
 
   return (
-    <div className="flex items-center gap-4 px-4 border-b border-white/[0.06] bg-[#0a0a14] shrink-0" style={{ height: '34px' }}>
+    <div className="flex items-center gap-4 px-4 border-b border-white/[0.06] bg-chrome shrink-0" style={{ height: '34px' }}>
       {/* Live indicator */}
       <div className={cn('flex items-center gap-1.5', serviceActive ? 'text-red-400' : 'text-white/30')}>
         <span className={cn('w-2 h-2 rounded-full', serviceActive ? 'bg-red-400 animate-pulse' : 'bg-white/20')} />
@@ -161,7 +161,7 @@ function TransitionPanel() {
   }
 
   return (
-    <div className="shrink-0 bg-[#09090f] rounded-xl border border-white/[0.06] p-2 flex flex-col gap-2">
+    <div className="shrink-0 bg-chrome rounded-xl border border-white/[0.06] p-2 flex flex-col gap-2">
       {/* Transition type */}
       <div className="flex gap-1">
         {(['cut', 'fade', 'wipe', 'move'] as TransitionType[]).map(t => (
@@ -217,7 +217,7 @@ function AIPanel({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
   return (
     <div className={cn(
-      'flex flex-col shrink-0 border-l border-white/[0.05] bg-[#08080e] transition-all duration-300',
+      'flex flex-col shrink-0 border-l border-white/[0.05] bg-chrome transition-all duration-300',
       collapsed ? 'w-8' : 'w-64',
     )}>
       {/* Toggle bar */}
@@ -270,7 +270,7 @@ function MultiViewGrid() {
   const cells = [...sources.slice(0, 8), ...Array(Math.max(0, 8 - sources.length)).fill(null)]
 
   return (
-    <div className="flex flex-col bg-[#07070e] border-l border-white/[0.05]" style={{ width: '268px' }}>
+    <div className="flex flex-col bg-chrome border-l border-white/[0.05]" style={{ width: '268px' }}>
       <div className="px-3 border-b border-white/[0.05] flex items-center" style={{ height: '26px' }}>
         <span className="text-[9px] font-semibold text-white/30 uppercase tracking-widest">Multi-View</span>
       </div>
@@ -394,7 +394,7 @@ export function ProductionPage() {
   }, [programId])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#06060c]">
+    <div className="h-full flex flex-col overflow-hidden bg-app">
       {/* ── Status bar ───────────────────────────────────────────────────── */}
       <StatusBar />
 

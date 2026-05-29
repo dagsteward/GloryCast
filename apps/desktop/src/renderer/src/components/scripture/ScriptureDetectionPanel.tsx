@@ -214,7 +214,7 @@ export function ScriptureDetectionPanel({ onSendToPreview }: Props) {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#09090f]">
+    <div className="h-full flex flex-col overflow-hidden bg-chrome">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06]">
         <div className="flex items-center gap-2">

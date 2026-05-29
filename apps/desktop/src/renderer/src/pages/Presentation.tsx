@@ -311,7 +311,7 @@ export function PresentationPage() {
     : slides
 
   return (
-    <div className="h-full flex overflow-hidden bg-[#08080f]">
+    <div className="h-full flex overflow-hidden bg-app">
 
       {/* ── Left: Slide library ──────────────────────────────────────────── */}
       <div className="w-52 shrink-0 flex flex-col border-r border-white/[0.05]">
@@ -412,7 +412,7 @@ export function PresentationPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.05] bg-[#09090f] shrink-0">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.05] bg-chrome shrink-0">
           <div className="flex items-center gap-1">
             <button onClick={goPrev} disabled={currentIdx === 0} className="icon-btn">
               <ChevronLeft size={14} />
@@ -548,7 +548,7 @@ export function PresentationPage() {
         </div>
 
         {/* Slide strip */}
-        <div className="h-[78px] shrink-0 border-t border-white/[0.05] bg-[#09090f] flex items-center gap-1.5 px-3 overflow-x-auto">
+        <div className="h-[78px] shrink-0 border-t border-white/[0.05] bg-chrome flex items-center gap-1.5 px-3 overflow-x-auto">
           {slides.map((slide, i) => (
             <SlideThumb
               key={slide.id}
@@ -572,7 +572,7 @@ export function PresentationPage() {
             animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className="shrink-0 border-l border-white/[0.05] overflow-hidden bg-[#0a0a12]"
+            className="shrink-0 border-l border-white/[0.05] overflow-hidden bg-chrome"
           >
             <div className="w-[280px] h-full">
               <CopilotFeed />

@@ -406,13 +406,13 @@ export function BiblePage() {
   } : null
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#07070a]">
+    <div className="h-full flex flex-col overflow-hidden bg-app">
 
       {/* ── Main 3-column layout ───────────────────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* ── Left: Book navigator ─────────────────────────────────────────── */}
-        <div className="w-44 shrink-0 flex flex-col border-r border-white/[0.05] bg-[#090910]">
+        <div className="w-44 shrink-0 flex flex-col border-r border-white/[0.05] bg-chrome">
           {/* OT / NT */}
           <div className="flex border-b border-white/[0.05] shrink-0">
             {(['OT','NT'] as const).map(t => (
@@ -452,7 +452,7 @@ export function BiblePage() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
           {/* Toolbar */}
-          <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-white/[0.05] bg-[#0a0a12] flex-wrap">
+          <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-white/[0.05] bg-chrome flex-wrap">
             {/* Back */}
             <button onClick={goBack} disabled={!history.length}
               className="p-1 rounded text-white/30 hover:text-white/70 disabled:opacity-25 transition-colors">
@@ -655,7 +655,7 @@ export function BiblePage() {
         </div>
 
         {/* ── Right: Feature panel ──────────────────────────────────────────── */}
-        <div className="w-72 shrink-0 border-l border-white/[0.05] flex flex-col bg-[#09090f]">
+        <div className="w-72 shrink-0 border-l border-white/[0.05] flex flex-col bg-chrome">
           {/* Tab bar */}
           <div className="flex shrink-0 border-b border-white/[0.05] overflow-x-auto scrollbar-none">
             {([
@@ -917,7 +917,7 @@ export function BiblePage() {
       </div>
 
       {/* ── Producer Queue Panel ────────────────────────────────────────────── */}
-      <div className="shrink-0 border-t border-white/[0.05] bg-[#080810]">
+      <div className="shrink-0 border-t border-white/[0.05] bg-app">
         {/* Collapse toggle bar */}
         <button onClick={() => setProducerOpen(v => !v)}
           className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-white/[0.03] transition-colors group">

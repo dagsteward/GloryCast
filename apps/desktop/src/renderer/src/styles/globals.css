@@ -38,6 +38,12 @@
   /* Effects */
   --gc-glass: rgba(255, 255, 255, 0.03);
   --gc-glass-hover: rgba(255, 255, 255, 0.06);
+
+  /* App chrome scale — single source of truth for page backgrounds.
+     --gc-app   : the page root canvas (darkest)
+     --gc-chrome: bars, headers, side rails, deep panels (one step up) */
+  --gc-app: #07070c;
+  --gc-chrome: #0a0a12;
 }
 
 * {
@@ -148,6 +154,16 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* App chrome surfaces — replace ad-hoc bg-[#0x0x0x] with these so every page
+   shares one scale and responds to the Dim / Light themes below. */
+.bg-app {
+  background: var(--gc-app);
+}
+
+.bg-chrome {
+  background: var(--gc-chrome);
+}
+
 /* Cinematic gradient backgrounds */
 .bg-broadcast {
   background: radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
@@ -195,6 +211,8 @@ body,
   --gc-text-primary: rgba(255, 255, 255, 0.92);
   --gc-text-secondary: rgba(255, 255, 255, 0.58);
   --gc-text-muted: rgba(255, 255, 255, 0.32);
+  --gc-app: #14141d;
+  --gc-chrome: #191922;
 }
 
 /* ─── Theme: Light ────────────────────────────────────────────────────────── */
@@ -211,6 +229,8 @@ body,
   --gc-text-muted: rgba(0, 0, 0, 0.36);
   --gc-glass: rgba(0, 0, 0, 0.025);
   --gc-glass-hover: rgba(0, 0, 0, 0.05);
+  --gc-app: #eaeaf2;
+  --gc-chrome: #ffffff;
 }
 
 .theme-light html,

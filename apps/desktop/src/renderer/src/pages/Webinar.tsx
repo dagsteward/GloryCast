@@ -160,7 +160,7 @@ export function WebinarPage() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="h-full flex flex-col items-center justify-center text-center gap-6 bg-[#08080f] relative overflow-hidden"
+        className="h-full flex flex-col items-center justify-center text-center gap-6 bg-app relative overflow-hidden"
       >
         {/* Background orbs */}
         <div className="absolute top-1/4 left-1/3 w-64 h-64 rounded-full bg-purple-600/5 blur-3xl pointer-events-none" />
@@ -221,7 +221,7 @@ export function WebinarPage() {
   const gridParticipants     = layout === 'grid' ? participants.slice(0, 6) : []
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#08080f] relative">
+    <div className="h-full flex flex-col overflow-hidden bg-app relative">
 
       {/* ── Animated ambient background ──────────────────────────────────── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">

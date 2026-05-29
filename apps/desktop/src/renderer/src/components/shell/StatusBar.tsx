@@ -16,7 +16,7 @@ export function StatusBar() {
   })
 
   return (
-    <footer className="flex items-center justify-between h-6 px-4 bg-[#080810] border-t border-white/[0.04] shrink-0">
+    <footer className="flex items-center justify-between h-6 px-4 bg-app border-t border-white/[0.04] shrink-0">
       {/* Left: Scene info */}
       <div className="flex items-center gap-4">
         {currentScene && (

@@ -144,7 +144,7 @@ export function EngagementPage() {
     <div className="h-full flex overflow-hidden">
 
       {/* ── Left panel ────────────────────────────────────────────────────── */}
-      <div className="w-72 shrink-0 flex flex-col border-r border-white/[0.05] bg-[#09090f]">
+      <div className="w-72 shrink-0 flex flex-col border-r border-white/[0.05] bg-chrome">
 
         {/* Tabs */}
         <div className="flex border-b border-white/[0.05]">

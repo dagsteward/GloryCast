@@ -103,7 +103,7 @@ function AppearanceSettings() {
               {/* Mini preview */}
               <div className={cn(
                 'w-full h-10 rounded-lg mb-3 border',
-                t.id === 'dark'  ? 'bg-[#07070a] border-white/10' :
+                t.id === 'dark'  ? 'bg-app border-white/10' :
                 t.id === 'dim'   ? 'bg-[#111118] border-white/10' :
                                    'bg-white border-gray-200',
               )}>
@@ -527,7 +527,7 @@ export function SettingsPage() {
   return (
     <div className="h-full flex overflow-hidden">
       {/* Sidebar */}
-      <div className="w-48 shrink-0 border-r border-white/[0.05] bg-[#09090f] py-3">
+      <div className="w-48 shrink-0 border-r border-white/[0.05] bg-chrome py-3">
         {SECTIONS.map(({ id, icon: Icon, label }) => (
           <button key={id} onClick={() => setSection(id)}
             className={cn(

@@ -36,7 +36,7 @@ export function VideoSwitcher() {
   }
 
   return (
-    <div className="flex items-stretch gap-0 bg-[#080810] border-t border-white/[0.05]" style={{ height: '100px' }}>
+    <div className="flex items-stretch gap-0 bg-app border-t border-white/[0.05]" style={{ height: '100px' }}>
       {/* Preview bus */}
       <div className="flex-1 p-2">
         <div className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest mb-1.5 px-1">

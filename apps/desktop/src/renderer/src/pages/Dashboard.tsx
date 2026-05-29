@@ -172,7 +172,7 @@ export function DashboardPage() {
           </div>
           {/* AI Copilot */}
           <div className="col-span-4">
-            <div className="card-premium overflow-hidden h-full min-h-[440px] flex flex-col bg-[#0a0a12]">
+            <div className="card-premium overflow-hidden h-full min-h-[440px] flex flex-col bg-chrome">
               <CopilotFeed />
             </div>
           </div>
