@@ -10,7 +10,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        memberships: {
+        churchMemberships: {
           include: { church: { select: { id: true, name: true, slug: true, logoUrl: true } } },
         },
       },
@@ -38,7 +38,7 @@ export class UsersService {
         take:  limit,
         include: {
           user: {
-            select: { id: true, email: true, displayName: true, avatarUrl: true, lastLoginAt: true },
+            select: { id: true, email: true, firstName: true, lastName: true, avatarUrl: true, lastLoginAt: true },
           },
         },
         orderBy: { joinedAt: 'desc' },

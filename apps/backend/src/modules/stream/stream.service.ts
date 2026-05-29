@@ -31,7 +31,7 @@ export class StreamService {
         streamKey,
         rtmpUrl:      `${rtmpBase}/live/${streamKey}`,
         isRecording:  dto.enableRecording ?? false,
-        destinations: dto.destinations ?? [],
+        destinations: dto.destinations ?? [] as any,
       },
     })
 
@@ -109,7 +109,7 @@ export class StreamService {
     await this.findOne(id, churchId)
     return this.prisma.stream.update({
       where: { id },
-      data:  dto,
+      data:  dto as any,
     })
   }
 

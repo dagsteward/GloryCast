@@ -64,7 +64,7 @@ export class PollService {
     const existing = await this.prisma.pollVote.findFirst({ where: { pollId, sessionId: participantId } })
     if (existing) throw new ConflictException('Already voted')
 
-    await this.prisma.pollVote.create({ data: { pollId, sessionId: participantId, optionIds } })
+    await this.prisma.pollVote.create({ data: { pollId, sessionId: participantId, optionIds: optionIds.map(String) } })
 
     const options = poll.options as { id: number; text: string; votes: number }[]
     for (const oid of optionIds) {

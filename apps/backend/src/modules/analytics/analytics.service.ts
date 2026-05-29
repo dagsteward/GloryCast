@@ -24,7 +24,7 @@ export class AnalyticsService {
       this.prisma.viewerSession.count({ where: { churchId, createdAt: { gte: monthAgo } } }),
       this.prisma.bibleReference.groupBy({
         by:      ['bookId', 'chapter', 'verse'],
-        where:   { churchId, createdAt: { gte: monthAgo } },
+        where:   { churchId, detectedAt: { gte: monthAgo } },
         _count:  { bookId: true },
         orderBy: { _count: { bookId: 'desc' } },
         take:    10,

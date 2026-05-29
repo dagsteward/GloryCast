@@ -14,7 +14,7 @@ import { Logger }           from '@nestjs/common'
   transports: ['websocket', 'polling'],
 })
 export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server
+  @WebSocketServer() server!: Server
   private readonly logger = new Logger(AppGateway.name)
   private readonly rooms  = new Map<string, Set<string>>() // churchId → socketIds
 

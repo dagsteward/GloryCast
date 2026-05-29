@@ -32,7 +32,7 @@ export class StageDisplayService {
     const display = await this.getForChurch(churchId)
     const updated = await this.prisma.stageDisplay.update({
       where: { id: display.id },
-      data:  { content, isActive: content.type !== 'BLANK', updatedAt: new Date() },
+      data:  { content: content as any, isActive: content.type !== 'BLANK', updatedAt: new Date() },
     })
     this.emitter.emit('stage.updated', { churchId, content })
     return updated

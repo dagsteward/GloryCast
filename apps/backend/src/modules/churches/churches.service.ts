@@ -23,7 +23,7 @@ export class ChurchesService {
     const church = await this.prisma.church.findUnique({
       where: { id },
       include: {
-        _count: { select: { members: true, streams: true } },
+        _count: { select: { users: true, streams: true } },
       },
     })
     if (!church) throw new NotFoundException('Church not found')

@@ -53,7 +53,7 @@ import { AppController } from './app.controller'
       isGlobal: true,
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({
-        store: createKeyv(cfg.get<string>('redis.url')!),
+        store: createKeyv(cfg.get<string>('redis.url')!) as any,
         ttl: 60_000,
       }),
     }),
