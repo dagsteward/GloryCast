@@ -4,9 +4,14 @@ import { TitleBar } from '../components/shell/TitleBar'
 import { StatusBar } from '../components/shell/StatusBar'
 import { AIAssistantPanel } from '../components/ai/AIAssistantPanel'
 import { useAppStore } from '../stores/appStore'
+import { useAiCopilot } from '../hooks/useAiCopilot'
 
 export function MainLayout() {
   const { aiPanelOpen } = useAppStore()
+
+  // Always-listening AI engine — runs once for the whole app. While a service
+  // is live, it feeds scripture + song detections into the shared serviceStore.
+  useAiCopilot()
 
   return (
     <div className="flex flex-col w-full h-full bg-broadcast overflow-hidden">

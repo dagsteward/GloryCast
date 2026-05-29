@@ -9,6 +9,8 @@ import { useMediaEngine, getStream } from '../hooks/useMediaEngine'
 import { AudioMixer } from '../components/production/AudioMixer'
 import { StreamControls } from '../components/production/StreamControls'
 import { SourceGrid } from '../components/production/SourceGrid'
+import { CopilotFeed } from '../components/live/CopilotFeed'
+import { useServiceStore } from '../stores/serviceStore'
 import { cn } from '../lib/utils'
 
 // ─── VideoPanel ───────────────────────────────────────────────────────────────
@@ -61,13 +63,16 @@ function VideoPanel({
 // ─── StatusBar ────────────────────────────────────────────────────────────────
 
 function StatusBar() {
+  const serviceActive    = useServiceStore(s => s.serviceActive)
+  const serviceStartedAt = useServiceStore(s => s.serviceStartedAt)
   const [elapsed, setElapsed] = useState(0)
-  const startRef = useRef(Date.now())
 
   useEffect(() => {
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    const id = setInterval(() => {
+      setElapsed(serviceStartedAt ? Math.floor((Date.now() - serviceStartedAt) / 1000) : 0)
+    }, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [serviceStartedAt])
 
   const h = String(Math.floor(elapsed / 3600)).padStart(2, '0')
   const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0')
@@ -76,9 +81,9 @@ function StatusBar() {
   return (
     <div className="flex items-center gap-4 px-4 border-b border-white/[0.06] bg-[#0a0a14] shrink-0" style={{ height: '34px' }}>
       {/* Live indicator */}
-      <div className="flex items-center gap-1.5 text-red-400">
-        <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-        <span className="text-[11px] font-bold tracking-wider">LIVE</span>
+      <div className={cn('flex items-center gap-1.5', serviceActive ? 'text-red-400' : 'text-white/30')}>
+        <span className={cn('w-2 h-2 rounded-full', serviceActive ? 'bg-red-400 animate-pulse' : 'bg-white/20')} />
+        <span className="text-[11px] font-bold tracking-wider">{serviceActive ? 'LIVE' : 'OFFLINE'}</span>
       </div>
 
       {/* Timer */}
@@ -205,20 +210,15 @@ function TransitionPanel() {
   )
 }
 
-// ─── AI Assistant panel ───────────────────────────────────────────────────────
-
-const MOCK_SCRIPTURES = [
-  { ref: 'Romans 8:28',       confidence: 97, time: '0:41' },
-  { ref: 'John 3:16',         confidence: 94, time: '0:38' },
-  { ref: 'Psalm 23:1',        confidence: 89, time: '0:35' },
-  { ref: 'Philippians 4:13',  confidence: 82, time: '0:28' },
-]
+// ─── AI Assistant panel (shared Copilot feed + stage readout) ──────────────────
 
 function AIPanel({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const program = useServiceStore(s => s.program)
+
   return (
     <div className={cn(
       'flex flex-col shrink-0 border-l border-white/[0.05] bg-[#08080e] transition-all duration-300',
-      collapsed ? 'w-8' : 'w-52',
+      collapsed ? 'w-8' : 'w-64',
     )}>
       {/* Toggle bar */}
       <button
@@ -227,66 +227,32 @@ function AIPanel({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         style={{ height: '34px' }}>
         {collapsed
           ? <ChevronRight size={12} />
-          : <div className="flex items-center gap-1.5 w-full px-3"><BookOpen size={10} /><span className="text-[9px] uppercase tracking-wider font-semibold text-white/40 flex-1">AI Assistant</span><ChevronLeft size={10} /></div>}
+          : <div className="flex items-center gap-1.5 w-full px-3"><BookOpen size={10} /><span className="text-[9px] uppercase tracking-wider font-semibold text-white/40 flex-1">AI Copilot</span><ChevronLeft size={10} /></div>}
       </button>
 
       {!collapsed && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Scripture detection */}
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
-            <div className="flex items-center gap-1 mb-2">
-              <Activity size={9} className="text-emerald-400 animate-pulse" />
-              <span className="text-[8px] text-emerald-400 font-semibold uppercase tracking-wide">Listening…</span>
-            </div>
-
-            {MOCK_SCRIPTURES.map((s, i) => (
-              <div key={s.ref}
-                className={cn(
-                  'p-2 rounded-lg border transition-all cursor-pointer hover:border-purple-500/30',
-                  i === 0
-                    ? 'border-purple-500/40 bg-purple-500/8'
-                    : 'border-white/[0.05] bg-white/[0.02] opacity-50',
-                )}>
-                <div className="flex items-start justify-between gap-1 mb-1">
-                  <span className={cn('text-[10px] font-semibold', i === 0 ? 'text-white/90' : 'text-white/40')}>
-                    {s.ref}
-                  </span>
-                  <span className="text-[8px] text-white/25 font-mono shrink-0">{s.time}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                    <div
-                      className={cn('h-full rounded-full', i === 0 ? 'bg-purple-500' : 'bg-white/20')}
-                      style={{ width: `${s.confidence}%` }}
-                    />
-                  </div>
-                  <span className="text-[8px] font-mono text-white/30">{s.confidence}%</span>
-                </div>
-              </div>
-            ))}
+          {/* Shared AI Copilot feed — same engine as Dashboard */}
+          <div className="flex-1 overflow-hidden">
+            <CopilotFeed compact />
           </div>
 
-          {/* Divider + Stage display */}
+          {/* Stage display — reflects the one shared Program bus */}
           <div className="border-t border-white/[0.05] p-2.5 shrink-0">
             <div className="flex items-center gap-1 mb-2">
               <Eye size={9} className="text-blue-400" />
-              <span className="text-[8px] text-white/40 uppercase tracking-wide font-semibold">Stage Display</span>
+              <span className="text-[8px] text-white/40 uppercase tracking-wide font-semibold">On Program</span>
             </div>
             <div className="rounded-lg bg-white/[0.03] border border-white/[0.05] p-2 text-center">
-              <p className="text-[9px] text-white/25 mb-1">Now on air</p>
-              <p className="text-[10px] text-white/60 font-medium leading-snug">Romans 8:28</p>
-              <p className="text-[8px] text-white/30 mt-0.5 italic">NIV</p>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-1">
-              {[
-                { label: 'Viewers', value: '1,284', color: 'text-purple-400' },
-                { label: 'Duration', value: '00:42', color: 'text-emerald-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="rounded bg-white/[0.03] p-1.5 text-center">
-                  <p className={cn('text-[11px] font-mono font-semibold', color)}>{value}</p>
-                  <p className="text-[8px] text-white/25">{label}</p>
-                </div>
-              ))}
+              {program ? (
+                <>
+                  <p className="text-[9px] text-white/25 mb-1">Now on air</p>
+                  <p className="text-[10px] text-white/70 font-medium leading-snug">{program.title}</p>
+                  {program.subtitle && <p className="text-[8px] text-white/30 mt-0.5 italic">{program.subtitle}</p>}
+                </>
+              ) : (
+                <p className="text-[9px] text-white/20 py-1">Nothing on Program</p>
+              )}
             </div>
           </div>
         </div>

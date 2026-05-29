@@ -6,9 +6,27 @@ import {
   FileText, Image as ImageIcon, Hash, Library,
 } from 'lucide-react'
 import { SlideCanvas } from '../components/presentation/SlideCanvas'
-import { ScriptureDetectionPanel } from '../components/scripture/ScriptureDetectionPanel'
+import { CopilotFeed } from '../components/live/CopilotFeed'
 import { useAppStore } from '../stores/appStore'
+import { useServiceStore, type LiveItem } from '../stores/serviceStore'
 import { cn } from '../lib/utils'
+
+// Map a presentation Slide onto the shared LiveItem bus.
+function slideToLiveItem(slide: Slide): Omit<LiveItem, 'id'> {
+  const kind: LiveItem['kind'] =
+    slide.type === 'song' ? 'song'
+    : slide.type === 'scripture' ? 'scripture'
+    : slide.type === 'announcement' ? 'announcement'
+    : 'blank'
+  return {
+    kind,
+    title:      slide.reference ?? slide.songTitle ?? slide.title,
+    body:       slide.body,
+    subtitle:   slide.type === 'scripture' ? slide.translation : slide.partLabel,
+    background: slide.background,
+    source:     'presentation',
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,7 +173,15 @@ export function PresentationPage() {
   const [search, setSearch]     = useState('')
   const [bgPicker, setBgPicker] = useState<string | null>(null)
 
-  const { isListeningForScripture, toggleScriptureListening, saveSong, deleteSong, songLibrary } = useAppStore()
+  const { saveSong, deleteSong, songLibrary } = useAppStore()
+
+  // Unified AI engine + shared Preview/Program bus.
+  const aiListening    = useServiceStore(s => s.aiListening)
+  const setAiListening = useServiceStore(s => s.setAiListening)
+  const svcPreview     = useServiceStore(s => s.preview)
+  const svcCut         = useServiceStore(s => s.cutToProgram)
+  const svcClearProgram = useServiceStore(s => s.clearProgram)
+
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Load persisted songs into the slide library on first mount
@@ -183,13 +209,15 @@ export function PresentationPage() {
     if (currentIdx > 0) setPreviewId(slides[currentIdx - 1].id)
   }
   const take = () => {
-    if (previewId) setProgramId(previewId)
+    if (!previewId) return
+    setProgramId(previewId)
+    const slide = slides.find(s => s.id === previewId)
+    if (slide) svcCut(slideToLiveItem(slide))   // mirror to shared Program bus
   }
-  const clearPgm = () => setProgramId(null)
+  const clearPgm = () => { setProgramId(null); svcClearProgram() }
 
-  // Called by ScriptureDetectionPanel when operator clicks "Send to Preview"
+  // Add a scripture slide to Preview (creates one if it doesn't exist yet).
   const addScriptureToPreview = useCallback((reference: string, text: string) => {
-    // Check if slide already exists
     const existing = slides.find(s => s.reference === reference)
     if (existing) { setPreviewId(existing.id); return }
 
@@ -205,6 +233,38 @@ export function PresentationPage() {
     setSlides(prev => [...prev, slide])
     setPreviewId(slide.id)
   }, [slides])
+
+  // Add a detected song line to Preview (matches the library by title + part).
+  const addSongToPreview = useCallback((songTitle: string, partLabel: string, line: string) => {
+    const existing = slides.find(s => s.songTitle === songTitle && s.partLabel === partLabel)
+    if (existing) { setPreviewId(existing.id); return }
+
+    const slide: Slide = {
+      id:        `det-song-${Date.now()}`,
+      type:      'song',
+      title:     `${songTitle} — ${partLabel}`,
+      body:      line,
+      songTitle,
+      partLabel,
+      background: 'gradient-purple',
+    }
+    setSlides(prev => [...prev, slide])
+    setPreviewId(slide.id)
+  }, [slides])
+
+  // Consume the shared Preview bus: when the AI Copilot (or any page) sends an
+  // item to Preview, surface it here as a slide.
+  const lastSvcPreviewRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!svcPreview || svcPreview.source === 'presentation') return
+    if (lastSvcPreviewRef.current === svcPreview.id) return
+    lastSvcPreviewRef.current = svcPreview.id
+    if (svcPreview.kind === 'scripture') {
+      addScriptureToPreview(svcPreview.title, svcPreview.body ?? '')
+    } else if (svcPreview.kind === 'song') {
+      addSongToPreview(svcPreview.title, svcPreview.subtitle ?? 'Verse', svcPreview.body ?? '')
+    }
+  }, [svcPreview, addScriptureToPreview, addSongToPreview])
 
   // Song file import — parse + add to slide library + persist
   const importSong = (file: File) => {
@@ -394,18 +454,18 @@ export function PresentationPage() {
               )}
             </div>
 
-            {/* AI Scripture */}
+            {/* AI Copilot (unified engine) */}
             <button
-              onClick={toggleScriptureListening}
+              onClick={() => setAiListening(!aiListening)}
               className={cn(
                 'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all',
-                isListeningForScripture
+                aiListening
                   ? 'bg-purple-600/25 text-purple-400 border border-purple-500/30'
                   : 'bg-white/[0.04] text-white/42 border border-white/[0.07] hover:text-white/70',
               )}
             >
-              <Mic2 size={11} className={isListeningForScripture ? 'live-dot text-purple-400' : ''} />
-              {isListeningForScripture ? 'AI Active' : 'AI Scripture'}
+              <Mic2 size={11} className={aiListening ? 'live-dot text-purple-400' : ''} />
+              {aiListening ? 'AI Active' : 'AI Copilot'}
             </button>
 
             {/* TAKE button */}
@@ -503,18 +563,20 @@ export function PresentationPage() {
         </div>
       </div>
 
-      {/* ── Right: AI Scripture Detection panel ─────────────────────────── */}
+      {/* ── Right: shared AI Copilot panel ──────────────────────────────── */}
       <AnimatePresence>
-        {isListeningForScripture && (
+        {aiListening && (
           <motion.div
             key="detection-panel"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 270, opacity: 1 }}
+            animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className="shrink-0 border-l border-white/[0.05] overflow-hidden"
+            className="shrink-0 border-l border-white/[0.05] overflow-hidden bg-[#0a0a12]"
           >
-            <ScriptureDetectionPanel onSendToPreview={addScriptureToPreview} />
+            <div className="w-[280px] h-full">
+              <CopilotFeed />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
