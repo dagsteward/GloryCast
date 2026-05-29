@@ -12,10 +12,11 @@ import { create } from 'zustand'
 
 export type SourceType =
   | 'camera' | 'screen' | 'media' | 'pattern'
-  | 'ndi' | 'obs' | 'vmix' | 'network'
+  | 'image' | 'color' | 'timer' | 'clock'
+  | 'ndi' | 'network'
 
-/** Sources fed over the network (OBS / vMix / NDI / RTMP-SRT-HLS relays). */
-export type NetworkProtocol = 'ndi' | 'obs' | 'vmix' | 'rtmp' | 'srt' | 'hls' | 'whep'
+/** Sources fed over the network (NDI / RTMP-SRT-HLS relays). */
+export type NetworkProtocol = 'ndi' | 'rtmp' | 'srt' | 'hls' | 'whep'
 
 export interface MediaSourceMeta {
   id: string
@@ -93,6 +94,87 @@ function createTestPatternStream(): MediaStream {
   return stream
 }
 
+// ─── Generated canvas sources (color / image / countdown / clock) ─────────────
+// These give GloryCast a native source palette comparable to a hardware/software
+// switcher — no external app required. Each renders onto a 1080p canvas and is
+// captured into a MediaStream so it switches like any camera.
+
+function makeCanvasStream(
+  draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
+  fps = 12,
+): MediaStream {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1920; canvas.height = 1080
+  const ctx = canvas.getContext('2d')!
+  let raf = 0
+  const loop = () => { draw(ctx, canvas.width, canvas.height); raf = requestAnimationFrame(loop) }
+  loop()
+  const stream = canvas.captureStream(fps)
+  ;(stream as any).__stopRaf = () => cancelAnimationFrame(raf)
+  return stream
+}
+
+function createColorStream(color: string): MediaStream {
+  return makeCanvasStream((ctx, w, h) => {
+    ctx.fillStyle = color
+    ctx.fillRect(0, 0, w, h)
+  }, 4)
+}
+
+function createImageStream(url: string): MediaStream {
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.src = url
+  let ready = false
+  img.onload = () => { ready = true }
+  return makeCanvasStream((ctx, w, h) => {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h)
+    if (!ready) return
+    // Cover-fit the image.
+    const ir = img.width / img.height, cr = w / h
+    let dw = w, dh = h, dx = 0, dy = 0
+    if (ir > cr) { dh = h; dw = h * ir; dx = (w - dw) / 2 }
+    else         { dw = w; dh = w / ir; dy = (h - dh) / 2 }
+    ctx.drawImage(img, dx, dy, dw, dh)
+  }, 4)
+}
+
+function createCountdownStream(targetTs: number, label: string): MediaStream {
+  return makeCanvasStream((ctx, w, h) => {
+    const grad = ctx.createLinearGradient(0, 0, 0, h)
+    grad.addColorStop(0, '#0b0b16'); grad.addColorStop(1, '#05050a')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h)
+
+    const remain = Math.max(0, targetTs - Date.now())
+    const m = Math.floor(remain / 60000)
+    const s = Math.floor((remain % 60000) / 1000)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+
+    if (label) {
+      ctx.font = '600 64px system-ui, sans-serif'
+      ctx.fillStyle = 'rgba(255,255,255,0.72)'
+      ctx.fillText(label, w / 2, h / 2 - 180)
+    }
+    ctx.font = 'bold 280px ui-monospace, monospace'
+    ctx.fillStyle = remain === 0 ? '#ef4444' : '#ffffff'
+    ctx.fillText(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`, w / 2, h / 2 + 20)
+  })
+}
+
+function createClockStream(): MediaStream {
+  return makeCanvasStream((ctx, w, h) => {
+    ctx.fillStyle = '#05050a'; ctx.fillRect(0, 0, w, h)
+    const now = new Date()
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.font = 'bold 260px ui-monospace, monospace'
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), w / 2, h / 2)
+    ctx.font = '600 64px system-ui, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.fillText(now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }), w / 2, h / 2 + 200)
+  })
+}
+
 // ─── Default appearance ───────────────────────────────────────────────────────
 
 const DEFAULT_APPEARANCE: AppearanceConfig = {
@@ -155,8 +237,13 @@ interface MediaEngineState {
   addScreenSource:   () => Promise<string | null>
   addMediaFile:      (file: File) => string
   addTestPattern:    () => string
-  /** Add an OBS / vMix / NDI / network source. Tries to attach a live stream
-   *  from `url` when one is given (HTTP/MJPEG/MP4/WebM playable by <video>). */
+  // ── Generated sources (native palette — no external switcher needed) ──
+  addColorSource:    (color: string, label?: string) => string
+  addImageSource:    (file: File) => string
+  addCountdownSource:(minutes: number, label?: string) => string
+  addClockSource:    () => string
+  /** Add an NDI / network ingest source. Tries to attach a live stream from
+   *  `url` when one is given (HTTP/MJPEG/MP4/WebM/HLS playable by <video>). */
   addNetworkSource:  (opts: { protocol: NetworkProtocol; url?: string; label?: string }) => string
   removeSource:      (id: string) => void
   /** Reorder the source pool — drag one source onto another's slot. */
@@ -294,16 +381,56 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
       return id
     },
 
-    // ── addNetworkSource (OBS / vMix / NDI / RTMP-SRT-HLS) ───────────────────
+    // ── Generated source factories ──────────────────────────────────────────
+    addColorSource: (color, label) => {
+      const id = uid('color')
+      _streams.set(id, createColorStream(color))
+      set(s => ({ sources: [...s.sources, {
+        id, label: label || 'Color Source', type: 'color',
+        active: true, hasVideo: true, hasAudio: false,
+      }] }))
+      return id
+    },
+
+    addImageSource: (file) => {
+      const id = uid('image')
+      const url = URL.createObjectURL(file)
+      _streams.set(id, createImageStream(url))
+      set(s => ({ sources: [...s.sources, {
+        id, label: file.name.replace(/\.[^.]+$/, ''), type: 'image',
+        active: true, hasVideo: true, hasAudio: false,
+      }] }))
+      return id
+    },
+
+    addCountdownSource: (minutes, label) => {
+      const id = uid('timer')
+      const target = Date.now() + Math.max(0, minutes) * 60000
+      _streams.set(id, createCountdownStream(target, label ?? ''))
+      set(s => ({ sources: [...s.sources, {
+        id, label: label || `Countdown ${minutes}m`, type: 'timer',
+        active: true, hasVideo: true, hasAudio: false,
+      }] }))
+      return id
+    },
+
+    addClockSource: () => {
+      const id = uid('clock')
+      _streams.set(id, createClockStream())
+      set(s => ({ sources: [...s.sources, {
+        id, label: 'Clock', type: 'clock',
+        active: true, hasVideo: true, hasAudio: false,
+      }] }))
+      return id
+    },
+
+    // ── addNetworkSource (NDI / RTMP-SRT-HLS ingest) ─────────────────────────
     addNetworkSource: ({ protocol, url, label }) => {
       const id = uid(protocol)
-      const type: SourceType =
-        protocol === 'ndi'  ? 'ndi'  :
-        protocol === 'obs'  ? 'obs'  :
-        protocol === 'vmix' ? 'vmix' : 'network'
+      const type: SourceType = protocol === 'ndi' ? 'ndi' : 'network'
 
       const defaultLabel: Record<NetworkProtocol, string> = {
-        ndi: 'NDI Source', obs: 'OBS Studio', vmix: 'vMix',
+        ndi: 'NDI Source',
         rtmp: 'RTMP Source', srt: 'SRT Source', hls: 'HLS Source', whep: 'WebRTC Source',
       }
 

@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState } from 'react'
 import {
   Plus, Camera, Monitor, Play, Cpu, ChevronDown, X, RefreshCw,
-  BookOpen, Music, Send, Network, Cast, Radio, Globe, ArrowLeft,
+  BookOpen, Music, Send, Network, Globe, ArrowLeft,
+  Palette, Image as ImageIcon, Timer, Clock,
 } from 'lucide-react'
 import {
   useMediaEngine, getStream,
@@ -32,12 +33,10 @@ function MiniThumb({ sourceId }: { sourceId: string }) {
   )
 }
 
-// ─── Network source connect form (OBS / vMix / NDI / Stream URL) ───────────────
+// ─── Network ingest connect form (NDI / RTMP / SRT / HLS / WebRTC) ─────────────
 
 const PROTOCOL_META: Record<NetworkProtocol, { label: string; hint: string; placeholder: string }> = {
-  ndi:  { label: 'NDI Source',          hint: 'Receive an NDI stream from OBS, vMix, a PTZ camera or another machine on the LAN.', placeholder: 'NDI source name  e.g. STUDIO-PC (OBS)' },
-  obs:  { label: 'OBS Studio',          hint: 'Pull OBS program output via its WebRTC (WHEP) endpoint, or use the OBS virtual camera under Video Sources.', placeholder: 'http://OBS-HOST:port/whep  (or NDI name)' },
-  vmix: { label: 'vMix',                hint: 'Pull the vMix program output over its built-in web server (Web Controller must be enabled).', placeholder: 'http://VMIX-HOST:8088/...' },
+  ndi:  { label: 'NDI Source',          hint: 'Receive an NDI stream from a PTZ camera, encoder or another machine on the LAN.', placeholder: 'NDI source name  e.g. STUDIO-PC (Channel 1)' },
   rtmp: { label: 'Stream URL',          hint: 'Relay an RTMP / SRT / HLS feed. HLS (.m3u8) and progressive MP4/WebM play directly.', placeholder: 'https://… .m3u8  ·  rtmp://…  ·  srt://…' },
   srt:  { label: 'SRT Source',          hint: 'Low-latency SRT feed (requires the stream gateway).', placeholder: 'srt://HOST:port' },
   hls:  { label: 'HLS Source',          hint: 'HTTP Live Streaming playlist.', placeholder: 'https://… .m3u8' },
@@ -93,6 +92,90 @@ function ConnectForm({
   )
 }
 
+// ─── Colour source form ────────────────────────────────────────────────────────
+
+const COLOR_SWATCHES = ['#000000', '#ffffff', '#7c3aed', '#2563eb', '#059669', '#dc2626', '#f59e0b', '#0ea5e9']
+
+function ColorForm({ onCancel, onAdd }: { onCancel: () => void; onAdd: (color: string, label: string) => void }) {
+  const [color, setColor] = useState('#000000')
+  const [label, setLabel] = useState('')
+  return (
+    <div className="p-3 space-y-2.5">
+      <button onClick={onCancel}
+        className="flex items-center gap-1 text-[9px] text-white/40 hover:text-white/70 transition-colors">
+        <ArrowLeft size={9} /> Back
+      </button>
+      <div>
+        <p className="text-[11px] font-semibold text-white/85">Colour Source</p>
+        <p className="text-[9px] text-white/35 leading-snug mt-0.5">A solid-colour fill — useful as a backdrop, bumper or for keying.</p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {COLOR_SWATCHES.map(c => (
+          <button key={c} onClick={() => setColor(c)}
+            className={cn('w-6 h-6 rounded-md border transition-all',
+              color === c ? 'border-white ring-2 ring-purple-400/70' : 'border-white/15 hover:border-white/40')}
+            style={{ backgroundColor: c }} />
+        ))}
+        <input type="color" value={color} onChange={e => setColor(e.target.value)}
+          className="w-6 h-6 rounded-md bg-transparent border border-white/15 cursor-pointer p-0" />
+      </div>
+      <input
+        value={label} onChange={e => setLabel(e.target.value)}
+        placeholder="Display name (optional)"
+        className="w-full px-2 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-[10px] text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/60"
+      />
+      <div className="flex gap-1.5">
+        <button onClick={onCancel}
+          className="flex-1 py-1.5 rounded-md bg-white/[0.05] hover:bg-white/[0.09] text-[10px] text-white/60 transition-colors">Cancel</button>
+        <button onClick={() => onAdd(color, label)}
+          className="flex-1 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-[10px] font-semibold text-white transition-colors">Add Source</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Countdown source form ──────────────────────────────────────────────────────
+
+function CountdownForm({ onCancel, onAdd }: { onCancel: () => void; onAdd: (minutes: number, label: string) => void }) {
+  const [minutes, setMinutes] = useState(5)
+  const [label, setLabel]     = useState('')
+  return (
+    <div className="p-3 space-y-2.5">
+      <button onClick={onCancel}
+        className="flex items-center gap-1 text-[9px] text-white/40 hover:text-white/70 transition-colors">
+        <ArrowLeft size={9} /> Back
+      </button>
+      <div>
+        <p className="text-[11px] font-semibold text-white/85">Countdown Timer</p>
+        <p className="text-[9px] text-white/35 leading-snug mt-0.5">A live MM:SS countdown — perfect for "service starts soon" pre-rolls.</p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {[5, 10, 15, 30].map(m => (
+          <button key={m} onClick={() => setMinutes(m)}
+            className={cn('flex-1 py-1.5 rounded-md text-[10px] font-semibold transition-colors',
+              minutes === m ? 'bg-purple-600 text-white' : 'bg-white/[0.05] text-white/55 hover:bg-white/[0.09]')}>
+            {m}m
+          </button>
+        ))}
+        <input type="number" min={1} value={minutes}
+          onChange={e => setMinutes(Math.max(1, Number(e.target.value) || 1))}
+          className="w-12 px-1.5 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-[10px] text-center text-white/85 focus:outline-none focus:border-purple-500/60" />
+      </div>
+      <input
+        value={label} onChange={e => setLabel(e.target.value)}
+        placeholder="Caption  e.g. Service starts in"
+        className="w-full px-2 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-[10px] text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/60"
+      />
+      <div className="flex gap-1.5">
+        <button onClick={onCancel}
+          className="flex-1 py-1.5 rounded-md bg-white/[0.05] hover:bg-white/[0.09] text-[10px] text-white/60 transition-colors">Cancel</button>
+        <button onClick={() => onAdd(minutes, label)}
+          className="flex-1 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-[10px] font-semibold text-white transition-colors">Add Timer</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── SourceGrid ───────────────────────────────────────────────────────────────
 
 export function SourceGrid() {
@@ -101,6 +184,7 @@ export function SourceGrid() {
     cameras, assignToPreview, removeSource,
     addCamera, addScreenSource, addMediaFile, addTestPattern,
     addNetworkSource, reorderSources, enumerateDevices,
+    addColorSource, addImageSource, addCountdownSource, addClockSource,
   } = useMediaEngine()
 
   // Shared graphics bus (scripture / song lower-thirds) — switchable sources.
@@ -114,15 +198,20 @@ export function SourceGrid() {
   const [tab, setTab] = useState<Tab>('video')
   const [menuOpen, setMenuOpen] = useState(false)
   const [connectProto, setConnectProto] = useState<NetworkProtocol | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+  // Which generated-source param form is open inside the Add menu (null = none).
+  const [genForm, setGenForm] = useState<'color' | 'countdown' | null>(null)
+  const fileRef    = useRef<HTMLInputElement>(null)  // media files (video/audio)
+  const imgFileRef = useRef<HTMLInputElement>(null)  // still image source
 
   // Drag-and-drop reorder state (ManyCam-style). The id being dragged lives in a
   // ref (no re-render); the hover target is state so we can highlight the slot.
   const dragId = useRef<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
 
-  const ndiCount = sources.filter(s =>
-    s.type === 'ndi' || s.type === 'obs' || s.type === 'vmix' || s.type === 'network').length
+  const ndiCount = sources.filter(s => s.type === 'ndi' || s.type === 'network').length
+  const genCount = sources.filter(s =>
+    s.type === 'pattern' || s.type === 'color' || s.type === 'image' ||
+    s.type === 'timer'   || s.type === 'clock').length
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'video',    label: 'Video Sources', count: sources.filter(s => s.type === 'camera').length },
@@ -130,14 +219,15 @@ export function SourceGrid() {
     { id: 'graphics', label: 'Graphics',      count: graphics.length },
     { id: 'ndi',      label: 'NDI / Network', count: ndiCount },
     { id: 'capture',  label: 'Capture Cards' },
-    { id: 'virtual',  label: 'Virtual' },
+    { id: 'virtual',  label: 'Generated',     count: genCount },
   ]
 
   const tabSources = sources.filter(s => {
     if (tab === 'video')   return s.type === 'camera'
     if (tab === 'media')   return s.type === 'media' || s.type === 'screen'
-    if (tab === 'ndi')     return s.type === 'ndi' || s.type === 'obs' || s.type === 'vmix' || s.type === 'network'
-    if (tab === 'virtual') return s.type === 'pattern'
+    if (tab === 'ndi')     return s.type === 'ndi' || s.type === 'network'
+    if (tab === 'virtual') return s.type === 'pattern' || s.type === 'color' ||
+                                  s.type === 'image'   || s.type === 'timer' || s.type === 'clock'
     return false
   })
 
@@ -173,7 +263,34 @@ export function SourceGrid() {
     setTab('ndi')
   }
 
-  function closeMenu() { setMenuOpen(false); setConnectProto(null) }
+  function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const id = addImageSource(file)
+    if (!previewId) assignToPreview(id)
+    e.target.value = ''
+    setTab('virtual')
+  }
+
+  function handleAddColor(color: string, label: string) {
+    const id = addColorSource(color, label.trim() || undefined)
+    if (id && !previewId) assignToPreview(id)
+    setGenForm(null); closeMenu(); setTab('virtual')
+  }
+
+  function handleAddCountdown(minutes: number, label: string) {
+    const id = addCountdownSource(minutes, label.trim() || undefined)
+    if (id && !previewId) assignToPreview(id)
+    setGenForm(null); closeMenu(); setTab('virtual')
+  }
+
+  function handleAddClock() {
+    const id = addClockSource()
+    if (id && !previewId) assignToPreview(id)
+    closeMenu(); setTab('virtual')
+  }
+
+  function closeMenu() { setMenuOpen(false); setConnectProto(null); setGenForm(null) }
 
   // ── Drag-and-drop handlers (shared shape for sources + graphics) ──
   function makeDragProps(id: string, onReorder: (from: string, to: string) => void) {
@@ -240,6 +357,10 @@ export function SourceGrid() {
                     onCancel={() => setConnectProto(null)}
                     onConnect={handleConnect}
                   />
+                ) : genForm === 'color' ? (
+                  <ColorForm onCancel={() => setGenForm(null)} onAdd={handleAddColor} />
+                ) : genForm === 'countdown' ? (
+                  <CountdownForm onCancel={() => setGenForm(null)} onAdd={handleAddCountdown} />
                 ) : (
                   <div className="max-h-72 overflow-y-auto">
                     <div className="text-[9px] text-white/30 uppercase px-3 pt-2.5 pb-1">Cameras</div>
@@ -264,28 +385,36 @@ export function SourceGrid() {
                       <Play size={9} className="text-orange-400 shrink-0" /> Media File (MP4, MOV…)
                     </button>
 
-                    <div className="text-[9px] text-white/30 uppercase px-3 pt-2 pb-1">External Switchers</div>
-                    <button onClick={() => setConnectProto('obs')}
+                    <div className="text-[9px] text-white/30 uppercase px-3 pt-2 pb-1">Generated Sources</div>
+                    <button onClick={() => setGenForm('color')}
                       className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
-                      <Cast size={9} className="text-sky-400 shrink-0" /> OBS Studio
+                      <Palette size={9} className="text-pink-400 shrink-0" /> Colour Source
                     </button>
-                    <button onClick={() => setConnectProto('vmix')}
+                    <button onClick={() => { imgFileRef.current?.click(); closeMenu() }}
                       className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
-                      <Radio size={9} className="text-rose-400 shrink-0" /> vMix
+                      <ImageIcon size={9} className="text-amber-400 shrink-0" /> Image (PNG, JPG…)
                     </button>
+                    <button onClick={() => setGenForm('countdown')}
+                      className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
+                      <Timer size={9} className="text-rose-400 shrink-0" /> Countdown Timer
+                    </button>
+                    <button onClick={handleAddClock}
+                      className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
+                      <Clock size={9} className="text-sky-400 shrink-0" /> Clock / Date
+                    </button>
+                    <button onClick={() => { handleAddPattern(); closeMenu() }}
+                      className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
+                      <Cpu size={9} className="text-purple-400 shrink-0" /> Test Pattern (SMPTE)
+                    </button>
+
+                    <div className="text-[9px] text-white/30 uppercase px-3 pt-2 pb-1">Network Ingest</div>
                     <button onClick={() => setConnectProto('ndi')}
                       className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
                       <Network size={9} className="text-teal-400 shrink-0" /> NDI Source
                     </button>
                     <button onClick={() => setConnectProto('rtmp')}
-                      className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors">
-                      <Globe size={9} className="text-indigo-400 shrink-0" /> Stream URL (RTMP / SRT / HLS)
-                    </button>
-
-                    <div className="border-t border-white/[0.05] my-1" />
-                    <button onClick={() => { handleAddPattern(); closeMenu() }}
                       className="w-full text-left px-3 py-1.5 text-[10px] text-white/65 hover:bg-white/[0.05] hover:text-white flex items-center gap-2 transition-colors pb-2">
-                      <Cpu size={9} className="text-purple-400 shrink-0" /> Test Pattern (SMPTE)
+                      <Globe size={9} className="text-indigo-400 shrink-0" /> Stream URL (RTMP / SRT / HLS)
                     </button>
                   </div>
                 )}
@@ -441,20 +570,24 @@ export function SourceGrid() {
       )}
 
       <input ref={fileRef} type="file" accept="video/*,audio/*" className="hidden" onChange={handleFile} />
+      <input ref={imgFileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
     </div>
   )
 }
 
 // ─── Placeholder for sources without a live stream ─────────────────────────────
-// Network sources (NDI / OBS / vMix / relays) may be waiting on a feed; show the
-// protocol, the connection target and a status chip instead of a black tile.
+// Network sources (NDI / relays) may be waiting on a feed; show the protocol, the
+// connection target and a status chip instead of a black tile.
 
 function SourcePlaceholder({ src }: { src: MediaSourceMeta }) {
   const Icon =
-    src.type === 'ndi'  ? Network :
-    src.type === 'obs'  ? Cast :
-    src.type === 'vmix' ? Radio :
-    src.type === 'network' ? Globe : Monitor
+    src.type === 'ndi'     ? Network :
+    src.type === 'network' ? Globe :
+    src.type === 'image'   ? ImageIcon :
+    src.type === 'color'   ? Palette :
+    src.type === 'timer'   ? Timer :
+    src.type === 'clock'   ? Clock :
+    src.type === 'pattern' ? Cpu : Monitor
 
   const statusColor =
     src.status === 'live'       ? 'text-emerald-400' :

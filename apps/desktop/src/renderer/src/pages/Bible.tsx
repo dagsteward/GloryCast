@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, BookOpen, Star, Send, ChevronRight,
@@ -198,6 +198,91 @@ function generateFakeVerses(bookName: string, chapter: number): VerseData[] {
   }))
 }
 
+// ─── Quote → verse finder ─────────────────────────────────────────────────────
+// Producers often remember a *line* of a verse, not its reference. This scans the
+// available verse text and ranks matches so a half-remembered quote surfaces the
+// right scripture, ready to queue or send live.
+
+type SearchMode = 'phrase' | 'all' | 'any'
+
+interface SearchHit {
+  book:    string
+  chapter: number
+  verse:   number
+  ref:     string
+  text:    string
+  score:   number
+}
+
+const STOPWORDS = new Set(['the','and','a','of','to','in','that','is','for','he','i','his','my','me','you','it','as','be','so','but','not','with','on','will'])
+const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
+
+function searchVerses(query: string, mode: SearchMode): SearchHit[] {
+  const q = normalize(query)
+  if (q.length < 2) return []
+  const qWords = q.split(' ').filter(Boolean)
+  const meaningful = qWords.filter(w => !STOPWORDS.has(w))
+  const hits: SearchHit[] = []
+
+  for (const [key, verses] of Object.entries(VERSE_CACHE)) {
+    const [bookName, chap] = key.split(':')
+    for (const v of verses) {
+      const hay = normalize(v.text)
+      let score = 0
+
+      if (mode === 'phrase') {
+        if (hay.includes(q)) score = 1 + q.length / hay.length
+      } else {
+        const present = (meaningful.length ? meaningful : qWords).filter(w => hay.includes(w))
+        if (mode === 'all' && present.length === (meaningful.length ? meaningful : qWords).length) {
+          score = 1 + present.length / Math.max(1, qWords.length)
+        } else if (mode === 'any' && present.length > 0) {
+          score = present.length / Math.max(1, qWords.length)
+        }
+        // A contiguous phrase hit always wins, regardless of mode.
+        if (hay.includes(q)) score = Math.max(score, 1.5)
+      }
+
+      if (score > 0) {
+        hits.push({
+          book: bookName, chapter: Number(chap), verse: v.verse,
+          ref: `${bookName} ${chap}:${v.verse}`, text: v.text, score,
+        })
+      }
+    }
+  }
+
+  return hits.sort((a, b) => b.score - a.score).slice(0, 25)
+}
+
+// Render verse text with the matched query span(s) highlighted.
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+function Highlighted({ text, query, mode }: { text: string; query: string; mode: SearchMode }) {
+  const q = normalize(query)
+  if (q.length < 2) return <>{text}</>
+
+  // Whole phrase, or any query word (>1 char) for word modes.
+  const terms = mode === 'phrase'
+    ? [q]
+    : Array.from(new Set(q.split(' ').filter(w => w.length > 1)))
+  if (terms.length === 0) return <>{text}</>
+
+  const re = new RegExp(`(${terms.map(escapeRe).join('|')})`, 'gi')
+  const parts = text.split(re)
+  const isMatch = (part: string) => terms.some(t => part.toLowerCase() === t)
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        isMatch(part)
+          ? <mark key={i} className="bg-purple-500/30 text-purple-100 rounded px-0.5">{part}</mark>
+          : <span key={i}>{part}</span>,
+      )}
+    </>
+  )
+}
+
 // ─── Cross-references & topics ────────────────────────────────────────────────
 
 const CROSS_REFS: Record<string, { ref: string; text: string }[]> = {
@@ -267,7 +352,7 @@ export function BiblePage() {
   const [selectedVerse,      setSelectedVerse]      = useState<number|null>(16)
   const [rightTab,           setRightTab]           = useState<RightTab>('crossrefs')
   const [searchQuery,        setSearchQuery]        = useState('')
-  const [searchResults,      setSearchResults]      = useState<{ref:string;text:string}[]>([])
+  const [searchMode,         setSearchMode]         = useState<SearchMode>('phrase')
   const [topicQuery,         setTopicQuery]         = useState('')
   const [bookmarks,          setBookmarks]          = useState<Set<string>>(new Set(['Romans:8:28']))
   const [wordStudyWord,      setWordStudyWord]      = useState('')
@@ -335,21 +420,10 @@ export function BiblePage() {
     })
   }
 
-  // ── Search ──────────────────────────────────────────────────────────────────
-
-  function runSearch() {
-    if (!searchQuery.trim()) { setSearchResults([]); return }
-    const q = searchQuery.toLowerCase()
-    const results: {ref:string;text:string}[] = []
-    Object.entries(VERSE_CACHE).forEach(([key, vs]) => {
-      const [bookName, chap] = key.split(':')
-      vs.forEach(v => {
-        if (v.text.toLowerCase().includes(q))
-          results.push({ ref: `${bookName} ${chap}:${v.verse}`, text: v.text })
-      })
-    })
-    setSearchResults(results.slice(0, 20))
-  }
+  // ── Quote → verse finder (live suggestions) ──────────────────────────────────
+  // Results update as the producer types/pastes a remembered line — no need to
+  // press a button. Each hit can be jumped to, queued, or sent live.
+  const searchResults = useMemo(() => searchVerses(searchQuery, searchMode), [searchQuery, searchMode])
 
   // ── Display queue ────────────────────────────────────────────────────────────
 
@@ -393,6 +467,48 @@ export function BiblePage() {
     // switch deck under the "Graphics" tab.
     addGraphic(toLiveItem(item))
     setProducerOpen(true)
+  }
+
+  // Build a QueueItem from a search hit (the finder doesn't carry dual-mode).
+  function hitToQueueItem(hit: SearchHit, state: QueueItem['state']): QueueItem {
+    return {
+      id:                  `${Date.now()}-${hit.verse}`,
+      book:                hit.book,
+      chapter:             hit.chapter,
+      verse:               hit.verse,
+      primaryText:         hit.text,
+      primaryRef:          hit.ref,
+      primaryTranslation:  primaryTx,
+      style:               ltStyle,
+      background:          selectedBg,
+      state,
+      timestamp:           Date.now(),
+    }
+  }
+
+  // Present a found verse straight from the search panel.
+  function presentHit(hit: SearchHit, target: 'queue' | 'preview' | 'program') {
+    const item = hitToQueueItem(hit, target === 'program' ? 'program' : target === 'preview' ? 'preview' : 'prepared')
+    addGraphic(toLiveItem(item))
+    if (target === 'queue') {
+      setDisplayQueue(q => [...q, item])
+    } else if (target === 'preview') {
+      if (previewItem) setDisplayQueue(q => [...q, { ...previewItem, state: 'prepared' as const }])
+      setPreviewItem(item)
+      gfxToPreview(toLiveItem(item))
+    } else {
+      if (programItem) setDisplayQueue(q => [...q, { ...programItem, state: 'prepared' as const }])
+      setProgramItem(item)
+      setPreviewItem(null)
+      gfxToProgram(toLiveItem(item))
+    }
+    setProducerOpen(true)
+  }
+
+  // Jump the reader to a found verse so the producer can read it in context.
+  function jumpToHit(hit: SearchHit) {
+    const book = BOOKS.find(b => b.name === hit.book)
+    if (book) navigate(book, hit.chapter, hit.verse)
   }
 
   function moveToPreview(item: QueueItem) {
@@ -800,31 +916,83 @@ export function BiblePage() {
             {/* Search */}
             {rightTab === 'search' && (
               <div className="p-3 space-y-3">
-                <div className="flex gap-2">
+                {/* Quote → verse finder */}
+                <div className="relative">
+                  <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/25" />
                   <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && runSearch()}
-                    placeholder="Search scriptures..."
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-white/70 placeholder:text-white/25 outline-none focus:border-purple-500/40" />
-                  <button onClick={runSearch}
-                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors">
-                    Go
-                  </button>
+                    placeholder="Type or paste a line you heard…"
+                    autoComplete="off"
+                    className="w-full pl-7 pr-7 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-white/70 placeholder:text-white/25 outline-none focus:border-purple-500/40" />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/60 transition-colors">
+                      <X size={11} />
+                    </button>
+                  )}
                 </div>
-                <div className="flex gap-1 flex-wrap">
-                  {['phrase','any word','all words'].map(mode => (
-                    <button key={mode}
-                      className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-white/[0.04] text-white/35 hover:bg-purple-600/20 hover:text-purple-400 transition-colors">
-                      {mode}
+
+                {/* Match mode */}
+                <div className="flex gap-1">
+                  {([
+                    { id: 'phrase', label: 'Exact phrase' },
+                    { id: 'all',    label: 'All words' },
+                    { id: 'any',    label: 'Any word' },
+                  ] as { id: SearchMode; label: string }[]).map(m => (
+                    <button key={m.id} onClick={() => setSearchMode(m.id)}
+                      className={cn('px-2 py-0.5 rounded-full text-[9px] font-medium transition-colors',
+                        searchMode === m.id
+                          ? 'bg-purple-600/30 text-purple-300 border border-purple-500/30'
+                          : 'bg-white/[0.04] text-white/35 hover:bg-purple-600/15 hover:text-purple-400 border border-transparent')}>
+                      {m.label}
                     </button>
                   ))}
                 </div>
-                {searchResults.length === 0 && searchQuery && (
-                  <p className="text-[11px] text-white/30 text-center py-4">No results in cached verses</p>
+
+                {!searchQuery && (
+                  <p className="text-[10px] text-white/25 leading-relaxed text-center py-3 px-2">
+                    Remember a line but not the reference? Type what you heard and matching verses appear instantly — then queue or send them live.
+                  </p>
                 )}
-                {searchResults.map(r => (
-                  <div key={r.ref} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] cursor-pointer hover:border-purple-500/25 transition-all">
-                    <div className="text-[10px] text-purple-400 font-semibold mb-1">{r.ref}</div>
-                    <p className="text-[10px] text-white/50 leading-relaxed">{r.text.slice(0,100)}…</p>
+                {searchQuery && searchResults.length === 0 && (
+                  <p className="text-[11px] text-white/30 text-center py-4">No matching verses found</p>
+                )}
+                {searchResults.length > 0 && (
+                  <div className="text-[9px] text-white/30 uppercase tracking-widest">
+                    {searchResults.length} {searchResults.length === 1 ? 'match' : 'matches'}
+                  </div>
+                )}
+
+                {searchResults.map(hit => (
+                  <div key={hit.ref}
+                    className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-purple-500/25 transition-all group space-y-2">
+                    <div className="flex items-center justify-between">
+                      <button onClick={() => jumpToHit(hit)}
+                        title="Open in reader"
+                        className="text-[10px] text-purple-400 font-semibold hover:text-purple-300 flex items-center gap-1 transition-colors">
+                        {hit.ref}
+                        <ArrowUpRight size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                      <span className="text-[8px] text-white/25 font-mono">{primaryTx}</span>
+                    </div>
+                    <p className="text-[11px] text-white/65 leading-relaxed">
+                      <Highlighted text={hit.text} query={searchQuery} mode={searchMode} />
+                    </p>
+                    {/* Present actions */}
+                    <div className="flex gap-1 pt-0.5">
+                      <button onClick={() => presentHit(hit, 'queue')}
+                        className="flex-1 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white/55 text-[9px] font-semibold transition-colors flex items-center justify-center gap-1">
+                        <Plus size={9} /> Queue
+                      </button>
+                      <button onClick={() => presentHit(hit, 'preview')}
+                        className="flex-1 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/35 text-blue-300 text-[9px] font-semibold transition-colors flex items-center justify-center gap-1">
+                        <Eye size={9} /> Preview
+                      </button>
+                      <button onClick={() => presentHit(hit, 'program')}
+                        title="Send live to program"
+                        className="flex-1 py-1 rounded-lg bg-red-600/25 hover:bg-red-600/40 text-red-300 text-[9px] font-semibold transition-colors flex items-center justify-center gap-1">
+                        <Radio size={9} /> Live
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
