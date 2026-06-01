@@ -3,6 +3,7 @@ import { useServiceStore } from '../stores/serviceStore'
 import { useAppStore } from '../stores/appStore'
 import {
   detectScripture,
+  detectScriptureQuotes,
   detectSongs,
   resolveVerse,
   buildSongIndex,
@@ -39,7 +40,10 @@ export function useAiCopilot() {
   const recognitionRef    = useRef<any>(null)
   const finalTranscriptRef = useRef('')
   const seenScriptureRef  = useRef<Set<string>>(new Set())
+  const seenQuoteRef      = useRef<Set<string>>(new Set())
   const seenSongRef       = useRef<Set<string>>(new Set())
+  const lastQuoteScanRef  = useRef(0)
+  const quoteBusyRef      = useRef(false)
   const activeRef         = useRef(false)
 
   useEffect(() => {
@@ -106,6 +110,34 @@ export function useAiCopilot() {
         })()
       }
 
+      // ── Quoted / paraphrased scripture (no spoken reference) ──
+      // Throttled — the fuzzy whole-Bible scan is heavier than the regex, and
+      // running it every interim result is wasteful. Once per ~2s is plenty.
+      const now = Date.now()
+      if (!quoteBusyRef.current && now - lastQuoteScanRef.current > 2000) {
+        lastQuoteScanRef.current = now
+        quoteBusyRef.current = true
+        void (async () => {
+          try {
+            const quoteHits = await detectScriptureQuotes(windowText, seenQuoteRef.current)
+            for (const q of quoteHits) {
+              // Don't double-report a verse already caught by reference.
+              if (seenScriptureRef.current.has(q.reference)) continue
+              seenScriptureRef.current.add(q.reference)
+              addDetection({
+                kind:       'scripture',
+                reference:  q.reference,
+                text:       q.text,
+                subtitle:   q.translation,
+                confidence: q.confidence,
+              })
+            }
+          } finally {
+            quoteBusyRef.current = false
+          }
+        })()
+      }
+
       // ── Songs ──
       const songHits = detectSongs(windowText, songIndexRef.current, seenSongRef.current)
       for (const s of songHits) {
@@ -132,6 +164,7 @@ export function useAiCopilot() {
   useEffect(() => {
     if (!aiListening) {
       seenScriptureRef.current = new Set()
+      seenQuoteRef.current = new Set()
       seenSongRef.current = new Set()
       finalTranscriptRef.current = ''
     }

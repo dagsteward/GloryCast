@@ -11,6 +11,7 @@
 
 import {
   loadTranslation, getChapter, getVerseText, isBundled, BUNDLED_TRANSLATIONS,
+  searchBibleMerged,
 } from './bibleData'
 
 // ── Scripture ────────────────────────────────────────────────────────────────
@@ -96,6 +97,61 @@ export function detectScripture(text: string, seen: Set<string>): ScriptureHit[]
     results.push({ reference, book, chapter, verse, endVerse, confidence })
   }
   return results
+}
+
+// ── Spoken quote / paraphrase → verse suggestion ─────────────────────────────
+// A presenter often *quotes* scripture without saying the reference ("the Lord
+// is my shepherd, I shall not want"). We run the rolling transcript through the
+// fuzzy quote→verse engine (bundled WEB + KJV) and suggest the matching verse
+// so the operator can project the right one. Tuned to stay quiet unless the
+// match is strong, so ordinary speech doesn't spam the feed.
+
+export interface QuoteHit {
+  reference:  string
+  book:       string
+  chapter:    number
+  verse:      number
+  text:       string
+  translation: string
+  confidence: number
+}
+
+/** Map the search engine's raw score (~0–4) to a 0..1 confidence. */
+const scoreToConfidence = (score: number) => Math.max(0, Math.min(0.99, score / 4))
+
+/**
+ * Suggest verses for any scripture *quoted or paraphrased* in `text`.
+ * Requires bundled translations to be loaded (caller awaits this). Only returns
+ * matches above `minScore` (strong/exact phrasings) and not already in `seen`.
+ */
+export async function detectScriptureQuotes(
+  text: string,
+  seen: Set<string>,
+  opts: { minScore?: number; limit?: number } = {},
+): Promise<QuoteHit[]> {
+  const { minScore = 2.6, limit = 1 } = opts
+
+  // Need a reasonable run of meaningful words before a quote search is useful.
+  const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2)
+  if (words.length < 4) return []
+
+  // Ensure bundled text is available, then rank.
+  await Promise.all(BUNDLED_TRANSLATIONS.map(tx => loadTranslation(tx).catch(() => null)))
+  const hits = searchBibleMerged([...BUNDLED_TRANSLATIONS], text, { mode: 'smart', limit: limit + 4 })
+
+  const out: QuoteHit[] = []
+  for (const h of hits) {
+    if (h.score < minScore) continue
+    const ref = `${h.book} ${h.chapter}:${h.verse}`
+    if (seen.has(ref)) continue
+    seen.add(ref)
+    out.push({
+      reference: ref, book: h.book, chapter: h.chapter, verse: h.verse,
+      text: h.text, translation: h.tx, confidence: scoreToConfidence(h.score),
+    })
+    if (out.length >= limit) break
+  }
+  return out
 }
 
 /** Read verse text (or a whole chapter) from a bundled translation, or ''. */
