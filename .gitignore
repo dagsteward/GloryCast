@@ -24,3 +24,6 @@ packages/bible-engine/NDI/
 packages/bible-engine/*.dll
 packages/bible-engine/*.chm
 packages/bible-engine/*.mdw
+
+# Raw Bible source dumps (processed into apps/desktop/.../public/bible)
+.bible-src/

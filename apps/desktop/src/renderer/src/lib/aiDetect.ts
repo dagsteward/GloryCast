@@ -9,6 +9,10 @@
 // now imports from here.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import {
+  loadTranslation, getChapter, getVerseText, isBundled, BUNDLED_TRANSLATIONS,
+} from './bibleData'
+
 // ── Scripture ────────────────────────────────────────────────────────────────
 
 const BOOK_NAMES = [
@@ -94,13 +98,25 @@ export function detectScripture(text: string, seen: Set<string>): ScriptureHit[]
   return results
 }
 
-/** Fetch verse text from the local backend. Defaults to the church translation (NIV). */
-export async function fetchVerseText(
-  book: string,
-  chapter: number,
-  verse?: number,
-  translation = 'NIV',
-): Promise<string> {
+/** Read verse text (or a whole chapter) from a bundled translation, or ''. */
+function bundledVerseText(tx: string, book: string, chapter: number, verse?: number, endVerse?: number): string {
+  if (verse === undefined) {
+    const rows = getChapter(tx, book, chapter)
+    return rows.length ? rows.map(r => r.text).join(' ') : ''
+  }
+  const first = getVerseText(tx, book, chapter, verse)
+  if (!first) return ''
+  if (!endVerse || endVerse <= verse) return first
+  const parts = [first]
+  for (let v = verse + 1; v <= endVerse; v++) {
+    const t = getVerseText(tx, book, chapter, v)
+    if (t) parts.push(t)
+  }
+  return parts.join(' ')
+}
+
+/** Query the backend Bible API for a (possibly licensed) translation, or ''. */
+async function backendVerseText(book: string, chapter: number, verse: number | undefined, translation: string): Promise<string> {
   try {
     const path = verse
       ? `/reference/${encodeURIComponent(book)}/${chapter}/${verse}?translation=${translation}`
@@ -113,6 +129,50 @@ export async function fetchVerseText(
   } catch {
     return ''
   }
+}
+
+/**
+ * Resolve scripture text for projection. The bundled public-domain text (WEB +
+ * KJV) ships with the app, so projection ALWAYS has full verse text with no
+ * backend or network dependency. A licensed translation (NIV, …) is tried from
+ * the backend first; if unavailable we transparently fall back to bundled text
+ * so the projection is never just a bare reference.
+ */
+export async function resolveVerse(
+  book: string,
+  chapter: number,
+  verse?: number,
+  endVerse?: number,
+  translation = 'NIV',
+): Promise<{ text: string; translation: string }> {
+  // 1. Requested translation, if it's one we bundle.
+  if (isBundled(translation)) {
+    try { await loadTranslation(translation) } catch { /* ignore */ }
+    const t = bundledVerseText(translation, book, chapter, verse, endVerse)
+    if (t) return { text: t, translation: translation.toUpperCase() }
+  } else {
+    // 2. Licensed translation — try the backend (user's own licensed DB).
+    const t = await backendVerseText(book, chapter, verse, translation)
+    if (t) return { text: t, translation }
+  }
+
+  // 3. Always-available fallback: bundled WEB, then KJV.
+  for (const tx of BUNDLED_TRANSLATIONS) {
+    try { await loadTranslation(tx) } catch { continue }
+    const t = bundledVerseText(tx, book, chapter, verse, endVerse)
+    if (t) return { text: t, translation: tx }
+  }
+  return { text: '', translation: translation.toUpperCase() }
+}
+
+/** Back-compat: return just the text (bundled-first). */
+export async function fetchVerseText(
+  book: string,
+  chapter: number,
+  verse?: number,
+  translation = 'NIV',
+): Promise<string> {
+  return (await resolveVerse(book, chapter, verse, undefined, translation)).text
 }
 
 // ── Songs ──────────────────────────────────────────────────────────────────

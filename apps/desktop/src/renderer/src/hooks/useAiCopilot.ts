@@ -4,7 +4,7 @@ import { useAppStore } from '../stores/appStore'
 import {
   detectScripture,
   detectSongs,
-  fetchVerseText,
+  resolveVerse,
   buildSongIndex,
   type SongLine,
 } from '../lib/aiDetect'
@@ -93,12 +93,14 @@ export function useAiCopilot() {
       const scriptureHits = detectScripture(windowText, seenScriptureRef.current)
       for (const hit of scriptureHits) {
         void (async () => {
-          const text = await fetchVerseText(hit.book, hit.chapter, hit.verse, COPILOT_TRANSLATION)
+          const { text, translation } = await resolveVerse(
+            hit.book, hit.chapter, hit.verse, hit.endVerse, COPILOT_TRANSLATION,
+          )
           addDetection({
             kind:       'scripture',
             reference:  hit.reference,
             text:       text || '(verse text unavailable — open Bible page)',
-            subtitle:   COPILOT_TRANSLATION,
+            subtitle:   translation,
             confidence: hit.confidence,
           })
         })()

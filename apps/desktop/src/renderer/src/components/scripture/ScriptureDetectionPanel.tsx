@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Mic2, BookOpen, Zap, CheckCircle2, Clock, Monitor, Send, MicOff } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { cn } from '../../lib/utils'
+import { loadTranslation, getChapter, getVerseText, BUNDLED_TRANSLATIONS } from '../../lib/bibleData'
 
 export interface DetectedScripture {
   id: string
@@ -93,20 +94,35 @@ function detectInText(text: string, seen: Set<string>): RawDetection[] {
   return results
 }
 
-async function fetchVerseText(book: string, chapter: number, verse?: number): Promise<string> {
-  try {
-    const path = verse
-      ? `/reference/${encodeURIComponent(book)}/${chapter}/${verse}?translation=NIV`
-      : `/reference/${encodeURIComponent(book)}/${chapter}?translation=NIV`
-    const res = await fetch(`http://localhost:3001/api/v1/bible${path}`)
-    if (!res.ok) return ''
-    const data = await res.json()
-    const verses: any[] = data?.data?.verses ?? []
-    if (verses.length === 0) return ''
-    return verses.map((v: any) => v.text).join(' ')
-  } catch {
-    return ''
+// Resolve the actual scripture text from the bundled public-domain Bible
+// (WEB preferred, KJV fallback) so projection always has the full verse — no
+// backend or network dependency. Returns the text and the translation used.
+async function resolveVerseText(
+  book: string, chapter: number, verse?: number, endVerse?: number,
+): Promise<{ text: string; translation: string }> {
+  for (const tx of BUNDLED_TRANSLATIONS) {
+    try { await loadTranslation(tx) } catch { continue }
+
+    if (verse === undefined) {
+      // Whole chapter requested — join every verse.
+      const rows = getChapter(tx, book, chapter)
+      if (rows.length) return { text: rows.map(r => r.text).join(' '), translation: tx }
+      continue
+    }
+
+    const first = getVerseText(tx, book, chapter, verse)
+    if (!first) continue
+    if (!endVerse || endVerse <= verse) return { text: first, translation: tx }
+
+    // Verse range — gather verse..endVerse.
+    const parts: string[] = [first]
+    for (let v = verse + 1; v <= endVerse; v++) {
+      const t = getVerseText(tx, book, chapter, v)
+      if (t) parts.push(t)
+    }
+    return { text: parts.join(' '), translation: tx }
   }
+  return { text: '', translation: BUNDLED_TRANSLATIONS[0] }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -125,12 +141,12 @@ export function ScriptureDetectionPanel({ onSendToPreview }: Props) {
   const activeRef = useRef(true)
 
   const addDetection = useCallback(async (raw: RawDetection) => {
-    const text = await fetchVerseText(raw.book, raw.chapter, raw.verse)
+    const { text, translation } = await resolveVerseText(raw.book, raw.chapter, raw.verse, raw.endVerse)
     const detection: DetectedScripture = {
       id: `det-${Date.now()}-${Math.random()}`,
       reference: raw.reference,
       text: text || '(verse text unavailable — check Bible page)',
-      translation: 'NIV',
+      translation,
       confidence: raw.confidence,
       detectedAt: new Date(),
       state: 'detected',

@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, BookOpen, Star, Send, ChevronRight,
@@ -14,6 +14,11 @@ import { useServiceStore, type LiveItem } from '../stores/serviceStore'
 import { BackgroundPicker } from '../components/bible/BackgroundPicker'
 import { SlideBackdrop } from '../components/bible/SlideBackdrop'
 import { useBackgroundStore } from '../stores/backgroundStore'
+import {
+  loadTranslation, isLoaded, isBundled, getChapter, searchBibleMerged,
+  highlightTerms, highlightRegex, BUNDLED_TRANSLATIONS,
+  type SearchMode, type SearchHit,
+} from '../lib/bibleData'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,7 +66,9 @@ const BOOKS: Book[] = [
 // ─── Translations (global) ───────────────────────────────────────────────────
 
 const TRANSLATIONS: Translation[] = [
-  // English
+  // English — WEB & KJV ship with the app (public domain); the rest load from
+  // the user's own licensed files via the backend.
+  { id: 'WEB',  name: 'World English Bible',         lang: 'English'    },
   { id: 'KJV',  name: 'King James Version',          lang: 'English'    },
   { id: 'NIV',  name: 'New International Version',   lang: 'English'    },
   { id: 'ESV',  name: 'English Standard Version',    lang: 'English'    },
@@ -89,7 +96,7 @@ const TRANSLATIONS: Translation[] = [
 ]
 
 const TRANSLATION_GROUPS = [
-  { label: 'English',        ids: ['KJV','NIV','ESV','NKJV','NLT','MSG','AMP','GNT'] },
+  { label: 'English',        ids: ['WEB','KJV','NIV','ESV','NKJV','NLT','MSG','AMP','GNT'] },
   { label: 'Ghanaian / West Africa', ids: ['AST','AKN','TWI','HAU','YOR','IGB'] },
   { label: 'East & South Africa',    ids: ['SWA','ZUL'] },
   { label: 'European',       ids: ['LSG','RVR','ARC'] },
@@ -98,42 +105,10 @@ const TRANSLATION_GROUPS = [
 
 const translationById = (id: string) => TRANSLATIONS.find(t => t.id === id)
 
-// ─── Demo verse data ──────────────────────────────────────────────────────────
-
-const VERSE_CACHE: Record<string, VerseData[]> = {
-  'John:3': [
-    {verse:16,text:'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.'},
-    {verse:17,text:'For God did not send his Son into the world to condemn the world, but to save the world through him.'},
-    {verse:18,text:'Whoever believes in him is not condemned, but whoever does not believe stands condemned already because they have not believed in the name of God\'s one and only Son.'},
-  ],
-  'Romans:8': [
-    {verse:26,text:'In the same way, the Spirit helps us in our weakness. We do not know what we ought to pray for, but the Spirit himself intercedes for us through wordless groans.'},
-    {verse:27,text:'And he who searches our hearts knows the mind of the Spirit, because the Spirit intercedes for God\'s people in accordance with the will of God.'},
-    {verse:28,text:'And we know that in all things God works for the good of those who love him, who have been called according to his purpose.',highlighted:'yellow'},
-    {verse:29,text:'For those God foreknew he also predestined to be conformed to the image of his Son, that he might be the firstborn among many brothers and sisters.'},
-    {verse:30,text:'And those he predestined, he also called; those he called, he also justified; those he justified, he also glorified.'},
-    {verse:31,text:'What, then, shall we say in response to these things? If God is for us, who can be against us?'},
-    {verse:38,text:'For I am convinced that neither death nor life, neither angels nor demons, neither the present nor the future, nor any powers,'},
-    {verse:39,text:'neither height nor depth, nor anything else in all creation, will be able to separate us from the love of God that is in Christ Jesus our Lord.'},
-  ],
-  'Psalms:23': [
-    {verse:1,text:'The LORD is my shepherd, I lack nothing.',highlighted:'purple'},
-    {verse:2,text:'He makes me lie down in green pastures, he leads me beside quiet waters,'},
-    {verse:3,text:'he refreshes my soul. He guides me along the right paths for his name\'s sake.'},
-    {verse:4,text:'Even though I walk through the darkest valley, I will fear no evil, for you are with me; your rod and your staff, they comfort me.'},
-    {verse:5,text:'You prepare a table before me in the presence of my enemies. You anoint my head with oil; my cup overflows.'},
-    {verse:6,text:'Surely your goodness and love will follow me all the days of my life, and I will dwell in the house of the LORD forever.'},
-  ],
-  'Philippians:4': [
-    {verse:4,text:'Rejoice in the Lord always. I will say it again: Rejoice!'},
-    {verse:6,text:'Do not be anxious about anything, but in every situation, by prayer and petition, with thanksgiving, present your requests to God.',highlighted:'green'},
-    {verse:7,text:'And the peace of God, which transcends all understanding, will guard your hearts and your minds in Christ Jesus.'},
-    {verse:8,text:'Finally, brothers and sisters, whatever is true, whatever is noble, whatever is right, whatever is pure, whatever is lovely, whatever is admirable—if anything is excellent or praiseworthy—think about such things.'},
-    {verse:13,text:'I can do all this through him who gives me strength.',highlighted:'yellow'},
-  ],
-}
-
-// Demo secondary texts per translation
+// ─── Secondary-translation snippets (non-bundled languages) ────────────────────
+// Illustrative dual-screen text for the non-bundled translations (Twi, French, …)
+// until the user installs the licensed file for that language. The primary text
+// (WEB / KJV) now comes from the full bundled Bible via lib/bibleData.
 const SECONDARY_TEXTS: Record<string, Record<string, string>> = {
   AST: {
     'John:3:16':        'Efiri sɛ Onyankopɔn dɔɔ wiase saa kɛse a, ɔde nʼabarimaa baako pɛ maa nnipa.',
@@ -187,100 +162,30 @@ const HIGHLIGHT_COLORS: Record<string, string> = {
   pink:   'bg-pink-500/15 border-pink-500/25',
 }
 
-function getVerses(bookName: string, chapter: number): VerseData[] {
-  return VERSE_CACHE[`${bookName}:${chapter}`] ?? generateFakeVerses(bookName, chapter)
-}
-
-function generateFakeVerses(bookName: string, chapter: number): VerseData[] {
-  return Array.from({ length: 8 }, (_, i) => ({
-    verse: i + 1,
-    text: `[${bookName} ${chapter}:${i + 1}] Scripture text will appear here when connected to the Bible engine.`,
-  }))
-}
-
 // ─── Quote → verse finder ─────────────────────────────────────────────────────
-// Producers often remember a *line* of a verse, not its reference. This scans the
-// available verse text and ranks matches so a half-remembered quote surfaces the
-// right scripture, ready to queue or send live.
+// Producers often remember a *line* of a verse, not its reference. The ranking
+// engine lives in lib/bibleData (searchBible) and scans the full bundled Bible
+// (WEB / KJV) with fuzzy paraphrase matching. Here we just render highlights.
 
-type SearchMode = 'phrase' | 'all' | 'any'
-
-interface SearchHit {
-  book:    string
-  chapter: number
-  verse:   number
-  ref:     string
-  text:    string
-  score:   number
-}
-
-const STOPWORDS = new Set(['the','and','a','of','to','in','that','is','for','he','i','his','my','me','you','it','as','be','so','but','not','with','on','will'])
-const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
-
-function searchVerses(query: string, mode: SearchMode): SearchHit[] {
-  const q = normalize(query)
-  if (q.length < 2) return []
-  const qWords = q.split(' ').filter(Boolean)
-  const meaningful = qWords.filter(w => !STOPWORDS.has(w))
-  const hits: SearchHit[] = []
-
-  for (const [key, verses] of Object.entries(VERSE_CACHE)) {
-    const [bookName, chap] = key.split(':')
-    for (const v of verses) {
-      const hay = normalize(v.text)
-      let score = 0
-
-      if (mode === 'phrase') {
-        if (hay.includes(q)) score = 1 + q.length / hay.length
-      } else {
-        const present = (meaningful.length ? meaningful : qWords).filter(w => hay.includes(w))
-        if (mode === 'all' && present.length === (meaningful.length ? meaningful : qWords).length) {
-          score = 1 + present.length / Math.max(1, qWords.length)
-        } else if (mode === 'any' && present.length > 0) {
-          score = present.length / Math.max(1, qWords.length)
-        }
-        // A contiguous phrase hit always wins, regardless of mode.
-        if (hay.includes(q)) score = Math.max(score, 1.5)
-      }
-
-      if (score > 0) {
-        hits.push({
-          book: bookName, chapter: Number(chap), verse: v.verse,
-          ref: `${bookName} ${chap}:${v.verse}`, text: v.text, score,
-        })
-      }
-    }
-  }
-
-  return hits.sort((a, b) => b.score - a.score).slice(0, 25)
-}
-
-// Render verse text with the matched query span(s) highlighted.
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
+// Render verse text with the matched query terms highlighted (stem-aware).
 function Highlighted({ text, query, mode }: { text: string; query: string; mode: SearchMode }) {
-  const q = normalize(query)
-  if (q.length < 2) return <>{text}</>
+  const terms = highlightTerms(query, mode)
+  const re = highlightRegex(terms)
+  if (!re) return <>{text}</>
 
-  // Whole phrase, or any query word (>1 char) for word modes.
-  const terms = mode === 'phrase'
-    ? [q]
-    : Array.from(new Set(q.split(' ').filter(w => w.length > 1)))
-  if (terms.length === 0) return <>{text}</>
-
-  const re = new RegExp(`(${terms.map(escapeRe).join('|')})`, 'gi')
-  const parts = text.split(re)
-  const isMatch = (part: string) => terms.some(t => part.toLowerCase() === t)
-
-  return (
-    <>
-      {parts.map((part, i) =>
-        isMatch(part)
-          ? <mark key={i} className="bg-purple-500/30 text-purple-100 rounded px-0.5">{part}</mark>
-          : <span key={i}>{part}</span>,
-      )}
-    </>
-  )
+  const out: React.ReactNode[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  let i = 0
+  re.lastIndex = 0
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(<span key={i++}>{text.slice(last, m.index)}</span>)
+    out.push(<mark key={i++} className="bg-purple-500/30 text-purple-100 rounded px-0.5">{m[0]}</mark>)
+    last = m.index + m[0].length
+    if (m.index === re.lastIndex) re.lastIndex++   // guard against zero-width
+  }
+  if (last < text.length) out.push(<span key={i++}>{text.slice(last)}</span>)
+  return <>{out}</>
 }
 
 // ─── Cross-references & topics ────────────────────────────────────────────────
@@ -346,13 +251,15 @@ export function BiblePage() {
   const [bookFilter,         setBookFilter]         = useState('')
   const [selectedBook,       setSelectedBook]       = useState<Book>(BOOKS[42])   // John
   const [selectedChapter,    setSelectedChapter]    = useState(3)
-  const [primaryTx,          setPrimaryTx]          = useState('KJV')
+  const [primaryTx,          setPrimaryTx]          = useState('WEB')
   const [secondaryTx,        setSecondaryTx]        = useState<string>('AST')
   const [dualMode,           setDualMode]           = useState(false)
   const [selectedVerse,      setSelectedVerse]      = useState<number|null>(16)
   const [rightTab,           setRightTab]           = useState<RightTab>('crossrefs')
   const [searchQuery,        setSearchQuery]        = useState('')
-  const [searchMode,         setSearchMode]         = useState<SearchMode>('phrase')
+  const [searchMode,         setSearchMode]         = useState<SearchMode>('smart')
+  // Bumped whenever a bundled translation finishes loading, to re-render verses.
+  const [bibleTick,          setBibleTick]          = useState(0)
   const [topicQuery,         setTopicQuery]         = useState('')
   const [bookmarks,          setBookmarks]          = useState<Set<string>>(new Set(['Romans:8:28']))
   const [wordStudyWord,      setWordStudyWord]      = useState('')
@@ -377,7 +284,32 @@ export function BiblePage() {
   // Selected slide background (shared registry — gradients, motion, uploads).
   const selectedBg = useBackgroundStore(s => s.selectedId)
 
-  const verses           = getVerses(selectedBook.name, selectedChapter)
+  // Which bundled translation to read/search from. NIV/ESV/… aren't bundled, so
+  // the reader shows an "install translation" notice and search falls back to WEB.
+  const primaryBundled = isBundled(primaryTx)
+  const searchTx       = primaryBundled ? primaryTx : 'WEB'
+
+  // Lazy-load bundled text. We load BOTH bundled translations (WEB + KJV): the
+  // primary for reading, and both as the quote-search corpus so a quote phrased
+  // like any of them still finds the verse. Re-render via bibleTick on load.
+  useEffect(() => {
+    const wanted = new Set<string>(BUNDLED_TRANSLATIONS)
+    if (dualMode && isBundled(secondaryTx)) wanted.add(secondaryTx)
+    let cancelled = false
+    for (const id of wanted) {
+      if (isLoaded(id)) continue
+      loadTranslation(id).then(() => { if (!cancelled) setBibleTick(t => t + 1) }).catch(() => {})
+    }
+    return () => { cancelled = true }
+  }, [secondaryTx, dualMode])
+
+  // Real verses from the bundled Bible (empty until loaded / when not bundled).
+  const verses: VerseData[] = useMemo(() => {
+    void bibleTick   // re-run when a translation finishes loading
+    if (!primaryBundled || !isLoaded(primaryTx)) return []
+    return getChapter(primaryTx, selectedBook.name, selectedChapter)
+      .map(r => ({ verse: r.verse, text: r.text }))
+  }, [primaryTx, primaryBundled, selectedBook.name, selectedChapter, bibleTick])
   const bookmarkKey      = (v: number) => `${selectedBook.name}:${selectedChapter}:${v}`
   const selectedVerseData = verses.find(v => v.verse === selectedVerse)
   const chapterCount     = selectedBook.chapterCount
@@ -423,7 +355,17 @@ export function BiblePage() {
   // ── Quote → verse finder (live suggestions) ──────────────────────────────────
   // Results update as the producer types/pastes a remembered line — no need to
   // press a button. Each hit can be jumped to, queued, or sent live.
-  const searchResults = useMemo(() => searchVerses(searchQuery, searchMode), [searchQuery, searchMode])
+  // Search both bundled translations (primary first so its wording wins ties).
+  const searchCorpus = useMemo(
+    () => Array.from(new Set([searchTx, ...BUNDLED_TRANSLATIONS])),
+    [searchTx],
+  )
+  const searchReady = searchCorpus.some(isLoaded)
+  const searchResults = useMemo(() => {
+    void bibleTick
+    if (!searchReady) return []
+    return searchBibleMerged(searchCorpus, searchQuery, { mode: searchMode })
+  }, [searchQuery, searchMode, searchCorpus, searchReady, bibleTick])
 
   // ── Display queue ────────────────────────────────────────────────────────────
 
@@ -478,7 +420,7 @@ export function BiblePage() {
       verse:               hit.verse,
       primaryText:         hit.text,
       primaryRef:          hit.ref,
-      primaryTranslation:  primaryTx,
+      primaryTranslation:  hit.tx,
       style:               ltStyle,
       background:          selectedBg,
       state,
@@ -715,6 +657,21 @@ export function BiblePage() {
                 )}
               </div>
 
+              {verses.length === 0 && (
+                <div className="py-12 text-center space-y-2">
+                  {!primaryBundled ? (
+                    <>
+                      <p className="text-sm text-white/40">{translationById(primaryTx)?.name ?? primaryTx} isn't installed</p>
+                      <p className="text-[11px] text-white/30 max-w-sm mx-auto leading-relaxed">
+                        {primaryTx} is a licensed translation. Install its file in Settings, or switch to the bundled <button onClick={() => setPrimaryTx('WEB')} className="text-purple-400 hover:text-purple-300 underline">WEB</button> / <button onClick={() => setPrimaryTx('KJV')} className="text-purple-400 hover:text-purple-300 underline">KJV</button>.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-white/35">Loading {primaryTx} Bible…</p>
+                  )}
+                </div>
+              )}
+
               <AnimatePresence mode="popLayout">
                 {verses.map(v => {
                   const isSelected  = selectedVerse === v.verse
@@ -934,6 +891,7 @@ export function BiblePage() {
                 {/* Match mode */}
                 <div className="flex gap-1">
                   {([
+                    { id: 'smart',  label: 'Smart' },
                     { id: 'phrase', label: 'Exact phrase' },
                     { id: 'all',    label: 'All words' },
                     { id: 'any',    label: 'Any word' },
@@ -950,10 +908,13 @@ export function BiblePage() {
 
                 {!searchQuery && (
                   <p className="text-[10px] text-white/25 leading-relaxed text-center py-3 px-2">
-                    Remember a line but not the reference? Type what you heard and matching verses appear instantly — then queue or send them live.
+                    Remember a line but not the reference? Type or paraphrase what you heard and matching verses appear instantly — searching the full WEB &amp; KJV text. Then queue or send them live.
                   </p>
                 )}
-                {searchQuery && searchResults.length === 0 && (
+                {searchQuery && !searchReady && (
+                  <p className="text-[11px] text-white/30 text-center py-4">Loading Bible…</p>
+                )}
+                {searchQuery && searchReady && searchResults.length === 0 && (
                   <p className="text-[11px] text-white/30 text-center py-4">No matching verses found</p>
                 )}
                 {searchResults.length > 0 && (
@@ -972,7 +933,7 @@ export function BiblePage() {
                         {hit.ref}
                         <ArrowUpRight size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
-                      <span className="text-[8px] text-white/25 font-mono">{primaryTx}</span>
+                      <span className="text-[8px] text-white/25 font-mono">{hit.tx}</span>
                     </div>
                     <p className="text-[11px] text-white/65 leading-relaxed">
                       <Highlighted text={hit.text} query={searchQuery} mode={searchMode} />
