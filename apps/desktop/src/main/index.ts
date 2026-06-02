@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, shell, Menu, session } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, shell, Menu, session, desktopCapturer } from 'electron'
 import { join } from 'path'
 import { createMediaEngine } from './media-engine'
 import { createIPCHandlers } from './ipc-handlers'
@@ -114,6 +114,15 @@ async function bootstrap() {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
     const allowed = ['media', 'display-capture', 'mediaKeySystem']
     return allowed.includes(permission)
+  })
+
+  // Electron ≥ 22 requires an explicit display-media handler for getDisplayMedia
+  // (screen share). Without it, "Add Source → Screen" silently fails. Grant the
+  // primary screen automatically so the producer's screen-capture just works.
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ['screen', 'window'] }).then(sources => {
+      callback(sources.length ? { video: sources[0] } : {})
+    }).catch(() => callback({}))
   })
 
   createIPCHandlers(store, windowManager)

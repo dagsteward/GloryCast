@@ -4,8 +4,8 @@ import {
   Crown, Menu, Bell, MessageSquare, HelpCircle, ChevronDown, Cpu, Wifi,
   Video, Film, Music2, BookOpen, Sparkles, Users, Image as ImageIcon,
   SlidersHorizontal, Play, Radio, MonitorSmartphone, Settings, Plus,
-  LayoutGrid, List, Eye, ThumbsUp, Clock, Mic, Brain, Send, FileText,
-  Scissors, RotateCw, Pause, Circle, Link2, ChevronRight,
+  LayoutGrid, List, Eye, ThumbsUp, Clock, Mic, Brain, Send,
+  RotateCw, Pause, Circle, Link2, ChevronRight,
   Camera, Monitor, Palette, Timer as TimerIcon, X, Trash2,
 } from 'lucide-react'
 import { useAiCopilot } from '../hooks/useAiCopilot'
@@ -95,32 +95,40 @@ export function ProductionPage() {
     useServiceStore.getState().setAiListening(true)
   }, [])
 
-  // Verse graphic overlaid on Program (set by the AI assistant actions).
-  const [programVerse, setProgramVerse] = useState<{ ref: string; text: string } | null>({
-    ref: 'Romans 8:28',
-    text: 'And we know that in all things God works for the good of those who love him, who have been called according to his purpose.',
-  })
+  // Producer-controlled projection. Nothing is shown until the producer pushes
+  // a verse to the live program output or the in-house stage display — no
+  // static lower-third. `liveGraphic` = on-air lower third; `stageGraphic` =
+  // confidence / stage-display feed.
+  const [liveGraphic, setLiveGraphic] = useState<Graphic | null>(null)
+  const [stageGraphic, setStageGraphic] = useState<Graphic | null>(null)
+  const [streaming, setStreaming] = useState(false)
 
   return (
     <div className="w-full h-full flex flex-col bg-[#070709] text-white/90 overflow-hidden select-none">
-      <TopBar elapsed={elapsed} sourceCount={sources.length} />
+      <TopBar elapsed={elapsed} sourceCount={sources.length} streaming={streaming} />
       <div className="flex-1 flex min-h-0">
         <SceneRail />
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-            <TopDeck elapsed={elapsed} programVerse={programVerse} setProgramVerse={setProgramVerse} />
-            <BottomDeck />
+            <TopDeck
+              elapsed={elapsed} streaming={streaming}
+              liveGraphic={liveGraphic} setLiveGraphic={setLiveGraphic}
+              stageGraphic={stageGraphic} setStageGraphic={setStageGraphic}
+            />
+            <BottomDeck streaming={streaming} setStreaming={setStreaming} />
           </div>
         </div>
       </div>
-      <BottomBar sourceCount={sources.length} />
+      <BottomBar sourceCount={sources.length} streaming={streaming} />
     </div>
   )
 }
 
+export interface Graphic { ref: string; text: string; translation?: string }
+
 // ── Top status bar ─────────────────────────────────────────────────────────
 
-function TopBar({ elapsed, sourceCount }: { elapsed: number; sourceCount: number }) {
+function TopBar({ elapsed, sourceCount, streaming }: { elapsed: number; sourceCount: number; streaming: boolean }) {
   return (
     <header className="h-14 shrink-0 flex items-center justify-between px-4 bg-gradient-to-b from-[#0c0c14] to-[#090910] border-b border-white/[0.06]">
       <div className="flex items-center gap-3">
@@ -137,11 +145,18 @@ function TopBar({ elapsed, sourceCount }: { elapsed: number; sourceCount: number
       </div>
 
       <div className="flex items-center gap-5 text-[12px]">
-        <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30">
-          <span className="live-dot w-2 h-2 rounded-full bg-red-500" />
-          <span className="font-bold text-red-400">LIVE</span>
-          <span className="font-mono text-red-400/80 tabular-nums">{fmtClock(elapsed)}</span>
-        </span>
+        {streaming ? (
+          <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30">
+            <span className="live-dot w-2 h-2 rounded-full bg-red-500" />
+            <span className="font-bold text-red-400">LIVE</span>
+            <span className="font-mono text-red-400/80 tabular-nums">{fmtClock(elapsed)}</span>
+          </span>
+        ) : (
+          <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/10">
+            <span className="w-2 h-2 rounded-full bg-white/30" />
+            <span className="font-bold text-white/50">STANDBY</span>
+          </span>
+        )}
         <span className="flex items-center gap-1.5 text-white/55"><Cpu size={13} className="text-cyan-400" /> Sources <b className="text-white/80 font-semibold">{sourceCount}</b></span>
         <span className="flex items-center gap-1.5 text-white/55"><Film size={13} className="text-emerald-400" /> FPS <b className="text-white/80 font-semibold">60</b></span>
         <span className="flex items-center gap-1.5 text-white/55"><Wifi size={13} className="text-emerald-400" /> Internet <b className="text-emerald-400 font-semibold">Excellent</b></span>
@@ -268,61 +283,67 @@ function Panel({ title, right, children, className }: {
 
 // ── Top deck ───────────────────────────────────────────────────────────────
 
-function TopDeck({ elapsed, programVerse, setProgramVerse }: {
+function TopDeck({ elapsed, streaming, liveGraphic, setLiveGraphic, stageGraphic, setStageGraphic }: {
   elapsed: number
-  programVerse: { ref: string; text: string } | null
-  setProgramVerse: (v: { ref: string; text: string } | null) => void
+  streaming: boolean
+  liveGraphic: Graphic | null
+  setLiveGraphic: (v: Graphic | null) => void
+  stageGraphic: Graphic | null
+  setStageGraphic: (v: Graphic | null) => void
 }) {
   return (
     <div className="grid grid-cols-12 gap-3">
       <div className="col-span-7 space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <ProgramMonitor elapsed={elapsed} verse={programVerse} clearVerse={() => setProgramVerse(null)} />
+          <ProgramMonitor elapsed={elapsed} streaming={streaming} graphic={liveGraphic} clearGraphic={() => setLiveGraphic(null)} />
           <PreviewMonitor />
         </div>
         <SourcesPanel />
       </div>
-      <div className="col-span-2"><AiAssistant onDisplay={setProgramVerse} /></div>
-      <div className="col-span-3"><StagePanel /></div>
+      <div className="col-span-2"><AiAssistant onLive={setLiveGraphic} onStage={setStageGraphic} liveRef={liveGraphic?.ref} stageRef={stageGraphic?.ref} /></div>
+      <div className="col-span-3"><StagePanel graphic={stageGraphic} clearGraphic={() => setStageGraphic(null)} /></div>
     </div>
   )
 }
 
-function ProgramMonitor({ elapsed, verse, clearVerse }: {
-  elapsed: number; verse: { ref: string; text: string } | null; clearVerse: () => void
+function ProgramMonitor({ elapsed, streaming, graphic, clearGraphic }: {
+  elapsed: number; streaming: boolean; graphic: Graphic | null; clearGraphic: () => void
 }) {
   const programId = useMediaEngine(s => s.programId)
   const sources   = useMediaEngine(s => s.sources)
   const prog = sources.find(s => s.id === programId)
   return (
-    <div className="rounded-xl overflow-hidden border border-red-500/40 bg-black flex flex-col">
+    <div className={cn('rounded-xl overflow-hidden border bg-black flex flex-col', streaming ? 'border-red-500/40' : 'border-white/10')}>
       <div className="flex items-center justify-between px-3 h-8 bg-[#0c0c15] border-b border-white/[0.05]">
         <span className="flex items-center gap-2 text-[12px] font-bold">
-          <span className="live-dot w-2 h-2 rounded-full bg-red-500" />
-          <span className="text-red-400">PROGRAM</span>
-          <span className="text-white/45 font-medium">(LIVE)</span>
+          <span className={cn('w-2 h-2 rounded-full', streaming ? 'live-dot bg-red-500' : 'bg-white/30')} />
+          <span className={streaming ? 'text-red-400' : 'text-white/60'}>PROGRAM</span>
+          <span className="text-white/45 font-medium">{streaming ? '(LIVE)' : '(STANDBY)'}</span>
         </span>
-        <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prog?.label ?? '1080p60'}</span>
+        <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prog?.label ?? 'No Program'}</span>
       </div>
       <div className="relative aspect-video">
         <SourceVideo key={programId ?? 'none'} id={programId} type={prog?.type} label={prog?.label ?? 'No Program'} className="w-full h-full" />
-        {verse && (
+        {graphic && (
           <div className="absolute bottom-0 left-0 right-0 p-5">
             <div className="border-l-[3px] border-purple-400 pl-4 group">
               <div className="text-3xl font-bold text-white drop-shadow-lg flex items-center gap-2">
-                {verse.ref}
-                <button onClick={clearVerse} className="opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} className="text-white/60" /></button>
+                {graphic.ref}
+                {graphic.translation && <span className="text-[11px] font-medium text-purple-200/70 self-end mb-1">{graphic.translation}</span>}
+                <button onClick={clearGraphic} title="Clear live graphic" className="opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} className="text-white/60" /></button>
               </div>
-              <p className="text-[15px] text-white/90 leading-snug mt-1 max-w-[92%] drop-shadow">{verse.text}</p>
+              <p className="text-[15px] text-white/90 leading-snug mt-1 max-w-[92%] drop-shadow">{graphic.text}</p>
             </div>
           </div>
         )}
       </div>
       <div className="flex items-center gap-4 px-3 h-9 bg-[#0c0c15] text-[11px]">
-        <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-600 text-white font-bold"><Circle size={7} className="fill-white" /> LIVE</span>
-        <span className="flex items-center gap-1 text-white/65"><Eye size={12} /> 12,452</span>
-        <span className="flex items-center gap-1 text-white/65"><ThumbsUp size={12} /> 3,128</span>
-        <span className="flex items-center gap-1 text-white/65 ml-auto font-mono"><Clock size={12} /> {fmtClock(elapsed)}</span>
+        {streaming
+          ? <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-600 text-white font-bold"><Circle size={7} className="fill-white" /> LIVE</span>
+          : <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/10 text-white/50 font-bold">OFF AIR</span>}
+        <span className="flex items-center gap-1 text-white/65"><Eye size={12} /> {streaming ? '—' : '0'}</span>
+        <span className="flex items-center gap-1 text-white/65"><ThumbsUp size={12} /> {streaming ? '—' : '0'}</span>
+        <span className="flex items-center gap-1 text-white/65 ml-auto font-mono"><Clock size={12} /> {streaming ? fmtClock(elapsed) : '00:00:00'}</span>
       </div>
     </div>
   )
@@ -527,61 +548,82 @@ function AddItem({ icon: Icon, label, onClick }: { icon: typeof Camera; label: s
 
 // ── AI Assistant (wired to the real copilot) ───────────────────────────────
 
-function AiAssistant({ onDisplay }: { onDisplay: (v: { ref: string; text: string }) => void }) {
+function AiAssistant({ onLive, onStage, liveRef, stageRef }: {
+  onLive:  (g: Graphic) => void
+  onStage: (g: Graphic) => void
+  liveRef?: string
+  stageRef?: string
+}) {
   const transcript = useServiceStore(s => s.transcript)
   const detections = useServiceStore(s => s.detections)
   const aiListening = useServiceStore(s => s.aiListening)
   const setAiListening = useServiceStore(s => s.setAiListening)
-  const latest = detections.find(d => d.kind === 'scripture') ?? detections[0]
+  const scriptures = detections.filter(d => d.kind === 'scripture')
 
   return (
     <Panel className="h-full">
       <div className="flex items-center gap-2 px-3 h-9 border-b border-white/[0.05]">
         <Brain size={15} className="text-purple-400" />
-        <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">AI Assistant</span>
-        <button onClick={() => setAiListening(!aiListening)} className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-white/[0.06] text-white/50 hover:text-white/80">
-          {aiListening ? 'Pause' : 'Listen'}
-        </button>
+        <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Bible AI</span>
+        <button
+          onClick={() => setAiListening(!aiListening)}
+          className={cn('ml-auto text-[9px] px-1.5 py-0.5 rounded font-semibold', aiListening ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] text-white/50 hover:text-white/80')}
+        >{aiListening ? 'Listening' : 'Paused'}</button>
       </div>
-      <div className="p-3 space-y-3 overflow-y-auto">
-        <div className="rounded-lg bg-black/30 border border-white/[0.05] p-2.5">
-          <div className="flex items-center gap-1.5 text-[11px] text-white/50 mb-2">
-            <Mic size={11} className={aiListening ? 'text-purple-400' : 'text-white/30'} /> {aiListening ? 'Listening...' : 'Idle'}
+      <div className="flex flex-col h-[calc(100%-2.25rem)]">
+        <div className="p-3 pb-2 shrink-0">
+          <div className="rounded-lg bg-black/30 border border-white/[0.05] p-2.5">
+            <div className="flex items-center gap-1.5 text-[11px] text-white/50 mb-2">
+              <Mic size={11} className={aiListening ? 'text-purple-400' : 'text-white/30'} /> {aiListening ? 'Listening for scripture…' : 'Paused'}
+            </div>
+            <div className="flex items-end gap-0.5 h-7">
+              {Array.from({ length: 36 }).map((_, i) => (
+                <span key={i} className="flex-1 rounded-full bg-gradient-to-t from-purple-600 to-fuchsia-400"
+                  style={{ height: `${aiListening ? 15 + Math.abs(Math.sin(i * 0.9)) * 85 : 6}%`, opacity: aiListening ? 0.5 + Math.abs(Math.sin(i)) * 0.5 : 0.2 }} />
+              ))}
+            </div>
+            {transcript && <p className="text-[9.5px] text-white/35 italic mt-1.5 line-clamp-2">…{transcript.slice(-120)}</p>}
           </div>
-          <div className="flex items-end gap-0.5 h-8">
-            {Array.from({ length: 40 }).map((_, i) => (
-              <span key={i} className="flex-1 rounded-full bg-gradient-to-t from-purple-600 to-fuchsia-400"
-                style={{ height: `${aiListening ? 20 + Math.abs(Math.sin(i * 0.9 + Date.now() / 400)) * 80 : 8}%`, opacity: aiListening ? 0.5 + Math.abs(Math.sin(i)) * 0.5 : 0.2 }} />
-            ))}
-          </div>
-          {transcript && <p className="text-[9.5px] text-white/35 italic mt-1.5 line-clamp-2">…{transcript.slice(-120)}</p>}
         </div>
 
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
-          <Sparkles size={12} /> {latest ? 'Scripture Detected' : 'Awaiting detection'}
+        <div className="px-3 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-white/35 shrink-0">
+          <Sparkles size={11} className="text-emerald-400" /> Detected · push to output
         </div>
 
-        <div>
-          <div className="text-lg font-bold text-white">{latest?.reference ?? 'Romans 8:28'}</div>
-          <p className="text-[11px] text-white/55 leading-relaxed mt-1 line-clamp-4">
-            {latest?.text ?? 'Speak a scripture reference or quote — detections appear here live, ready to project.'}
-          </p>
-        </div>
-
-        <div className="space-y-1.5 pt-1">
-          <button
-            onClick={() => latest && onDisplay({ ref: latest.reference, text: latest.text })}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500"
-          >
-            <MonitorSmartphone size={12} /> Display on Screen
-          </button>
-          <button
-            onClick={() => latest && onDisplay({ ref: latest.reference, text: latest.text })}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/[0.05] text-white/65 hover:bg-white/[0.09]"
-          ><FileText size={12} /> Add as Lower Third</button>
-          <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/[0.05] text-white/65 hover:bg-white/[0.09]"><FileText size={12} /> Add to Notes</button>
-          <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/[0.05] text-white/65 hover:bg-white/[0.09]"><Scissors size={12} /> Generate Social Clip</button>
-          <button className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white/[0.05] text-white/65 hover:bg-white/[0.09]"><Brain size={12} /> AI Sermon Notes</button>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-2 space-y-2">
+          {scriptures.length === 0 ? (
+            <div className="text-center py-6 text-white/25">
+              <BookOpen size={22} className="mx-auto mb-2 opacity-30" />
+              <p className="text-[11px]">Speak or quote a verse</p>
+              <p className="text-[9.5px] text-white/15 mt-0.5">References & paraphrases detected live</p>
+            </div>
+          ) : scriptures.map(d => {
+            const g: Graphic = { ref: d.reference, text: d.text, translation: d.subtitle }
+            const isLive = liveRef === d.reference, isStage = stageRef === d.reference
+            return (
+              <div key={d.id} className="rounded-lg border border-purple-500/20 bg-purple-600/[0.07] p-2.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <BookOpen size={11} className="text-purple-300 shrink-0" />
+                  <span className="text-[12px] font-bold text-purple-200 truncate">{d.reference}</span>
+                  {d.subtitle && <span className="text-[8.5px] text-white/30">{d.subtitle}</span>}
+                  <span className="ml-auto text-[8px] font-mono text-emerald-400/70">{Math.round(d.confidence * 100)}%</span>
+                </div>
+                <p className="text-[10.5px] text-white/55 leading-snug line-clamp-2 mb-2">{d.text}</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => onLive(g)}
+                    className={cn('flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-semibold transition-colors',
+                      isLive ? 'bg-red-600 text-white' : 'bg-red-600/20 text-red-300 hover:bg-red-600/40')}
+                  ><Circle size={7} className={isLive ? 'fill-white' : 'fill-red-400'} /> {isLive ? 'On Air' : 'Go Live'}</button>
+                  <button
+                    onClick={() => onStage(g)}
+                    className={cn('flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-semibold transition-colors',
+                      isStage ? 'bg-cyan-600 text-white' : 'bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/40')}
+                  ><MonitorSmartphone size={10} /> {isStage ? 'In-House' : 'Stage'}</button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </Panel>
@@ -592,7 +634,7 @@ function AiAssistant({ onDisplay }: { onDisplay: (v: { ref: string; text: string
 
 const STAGE_TABS = ['NEXT', 'NOTES', 'ANNOUNCEMENTS', 'TIMER']
 
-function StagePanel() {
+function StagePanel({ graphic, clearGraphic }: { graphic: Graphic | null; clearGraphic: () => void }) {
   const [tab, setTab] = useState(0)
   const [secs, setSecs] = useState(5 * 60)
   const [running, setRunning] = useState(false)
@@ -607,19 +649,25 @@ function StagePanel() {
       <div className="flex items-center gap-2 px-3 h-9 border-b border-white/[0.05]">
         <MonitorSmartphone size={15} className="text-cyan-400" />
         <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Stage Display</span>
-        <span className="text-[10px] text-white/35">(Live Feed)</span>
+        <span className="text-[10px] text-white/35">(In-House)</span>
+        {graphic && <button onClick={clearGraphic} title="Clear stage" className="ml-auto"><X size={13} className="text-white/40 hover:text-white/80" /></button>}
       </div>
       <div className="p-3 space-y-3">
-        <div className="relative overflow-hidden rounded-lg aspect-video p-4 flex flex-col justify-center bg-gradient-to-br from-orange-800 via-red-900 to-amber-950">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="relative z-10">
-            <div className="text-2xl font-bold text-white drop-shadow">Romans 8:28</div>
-            <p className="text-[12px] text-white/85 leading-snug mt-1.5 drop-shadow">
-              And we know that in all things God works for the good of those who love him, who have been called according to his purpose.
-            </p>
+        {graphic ? (
+          <div className="relative overflow-hidden rounded-lg aspect-video p-4 flex flex-col justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+            <div className="relative z-10">
+              <div className="text-2xl font-bold text-white drop-shadow">{graphic.ref}{graphic.translation && <span className="text-[11px] font-medium text-cyan-200/70 ml-2">{graphic.translation}</span>}</div>
+              <p className="text-[12px] text-white/85 leading-snug mt-1.5 drop-shadow">{graphic.text}</p>
+            </div>
           </div>
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-40 text-5xl">✝</div>
-        </div>
+        ) : (
+          <div className="relative overflow-hidden rounded-lg aspect-video flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-black text-white/30">
+            <MonitorSmartphone size={26} className="mb-2 opacity-40" />
+            <p className="text-[11px]">Stage display ready</p>
+            <p className="text-[9px] text-white/15 mt-0.5">Push a verse from Bible AI → Stage</p>
+          </div>
+        )}
 
         <div className="flex items-center gap-1 border-b border-white/[0.06]">
           {STAGE_TABS.map((t, i) => (
@@ -635,20 +683,15 @@ function StagePanel() {
         </div>
 
         {tab === 0 && (
-          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3">
-            <div className="text-sm font-bold text-white mb-1">Romans 8:29 — Up Next</div>
-            <p className="text-[10px] text-white/50 leading-relaxed">For those God foreknew he also predestined to be conformed to the image of his Son...</p>
+          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/40 leading-relaxed">
+            {graphic ? <>Currently on stage: <span className="text-white/70 font-medium">{graphic.ref}</span></> : 'Nothing queued. Push a detected verse to In-House.'}
           </div>
         )}
         {tab === 1 && (
-          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/60 leading-relaxed">
-            Sermon notes: God's sovereignty in all circumstances. Point 1 — His purpose. Point 2 — His calling.
-          </div>
+          <textarea placeholder="Type stage notes for the speaker…" className="w-full h-20 rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/70 placeholder:text-white/25 outline-none resize-none focus:border-cyan-500/30" />
         )}
         {tab === 2 && (
-          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/60 leading-relaxed">
-            📣 Youth night Friday 7pm · Baptism class Sunday · Volunteers needed for next week.
-          </div>
+          <textarea placeholder="Type an announcement to show on stage…" className="w-full h-20 rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/70 placeholder:text-white/25 outline-none resize-none focus:border-cyan-500/30" />
         )}
         {tab === 3 && (
           <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 flex flex-col items-center justify-center">
@@ -671,39 +714,56 @@ function StagePanel() {
 // ── Bottom deck ────────────────────────────────────────────────────────────
 
 // Polling + Quiz Leaderboard live on the Webinar page, not the broadcast desk.
-function BottomDeck() {
+function BottomDeck({ streaming, setStreaming }: { streaming: boolean; setStreaming: (v: boolean) => void }) {
   return (
     <div className="grid grid-cols-12 gap-3">
       <div className="col-span-6"><AudioMixer /></div>
-      <div className="col-span-3"><StreamingPanel /></div>
+      <div className="col-span-3"><StreamingPanel streaming={streaming} setStreaming={setStreaming} /></div>
       <div className="col-span-3"><MultiView /></div>
       <div className="col-span-12"><LiveChat /></div>
     </div>
   )
 }
 
-// ── Audio mixer (interactive faders) ───────────────────────────────────────
+// ── Audio mixer (real input devices + master) ──────────────────────────────
 
-const INITIAL_CHANNELS = [
-  { name: 'Mic 1', sub: 'Pastor',      level: 70 },
-  { name: 'Mic 2', sub: 'Worship Ldr', level: 60 },
-  { name: 'Mic 3', sub: 'Guest',       level: 45 },
-  { name: 'Music', sub: 'Playback',    level: 80 },
-  { name: 'SFX',   sub: 'Ambience',    level: 30 },
-  { name: 'NDI',   sub: 'Audio 1',     level: 50 },
-  { name: 'Zoom',  sub: 'Guest',       level: 40 },
-  { name: 'Teams', sub: 'Guest',       level: 42 },
-  { name: 'Master', sub: 'Output',     level: 85, master: true },
-]
+interface Chan { name: string; sub: string; level: number; master?: boolean; mute: boolean; solo: boolean }
 
 function AudioMixer() {
-  const [chans, setChans] = useState(INITIAL_CHANNELS.map(c => ({ ...c, mute: false, solo: false })))
-  const set = (i: number, patch: Partial<(typeof chans)[number]>) =>
+  const microphones = useMediaEngine(s => s.microphones)
+  const permissionState = useMediaEngine(s => s.permissionState)
+  const [chans, setChans] = useState<Chan[]>([])
+
+  // Build channels from the machine's real audio inputs + a master bus.
+  useEffect(() => {
+    useMediaEngine.getState().enumerateDevices()
+  }, [])
+  useEffect(() => {
+    const mics: Chan[] = microphones.map((m, i) => ({
+      name: m.label?.split('(')[0].trim() || `Input ${i + 1}`,
+      sub: 'Mic', level: 75, mute: false, solo: false,
+    }))
+    setChans([...mics, { name: 'Master', sub: 'Output', level: 85, master: true, mute: false, solo: false }])
+  }, [microphones])
+
+  const set = (i: number, patch: Partial<Chan>) =>
     setChans(cs => cs.map((c, j) => j === i ? { ...c, ...patch } : c))
   const dbOf = (lvl: number) => lvl === 0 ? '-∞' : (((lvl - 100) / 100) * 40).toFixed(1)
 
+  const needsAccess = microphones.length === 0
+
   return (
     <Panel title="Audio Mixer" className="h-[230px]">
+      {needsAccess ? (
+        <div className="h-full flex flex-col items-center justify-center gap-2 text-white/40">
+          <Mic size={22} className="opacity-50" />
+          <p className="text-[11px]">{permissionState === 'denied' ? 'Microphone access denied' : 'No audio inputs detected'}</p>
+          <button
+            onClick={async () => { await useMediaEngine.getState().requestPermission(); useMediaEngine.getState().enumerateDevices() }}
+            className="text-[11px] px-3 py-1.5 rounded-lg bg-purple-600/80 hover:bg-purple-600 text-white font-medium"
+          >Grant Microphone Access</button>
+        </div>
+      ) : (
       <div className="flex gap-1.5 p-3 h-full overflow-x-auto">
         {chans.map((ch, i) => (
           <div key={ch.name} className={cn('flex flex-col items-center gap-1 px-1.5 py-1 rounded-lg shrink-0 w-[58px]',
@@ -734,65 +794,70 @@ function AudioMixer() {
           </div>
         ))}
       </div>
+      )}
     </Panel>
   )
 }
 
-// ── Streaming & recording (toggleable destinations + recorder) ─────────────
+// ── Streaming destinations — the producer chooses what goes live ───────────
 
-const INITIAL_STREAMS = [
-  { name: 'YouTube Live',    color: 'bg-red-600',    on: true },
-  { name: 'Facebook Live',   color: 'bg-blue-600',   on: true },
-  { name: 'Zoom Webinar',    color: 'bg-sky-500',    on: true },
+interface Dest { name: string; color: string; on: boolean }
+const DEFAULT_DESTS: Dest[] = [
+  { name: 'YouTube Live',    color: 'bg-red-600',    on: false },
+  { name: 'Facebook Live',   color: 'bg-blue-600',   on: false },
+  { name: 'Zoom Webinar',    color: 'bg-sky-500',    on: false },
   { name: 'Microsoft Teams', color: 'bg-indigo-600', on: false },
   { name: 'Custom RTMP',     color: 'bg-purple-600', on: false },
 ]
 
-function StreamingPanel() {
-  const [streams, setStreams] = useState(INITIAL_STREAMS)
-  const [recording, setRecording] = useState(true)
-  const [recSecs, setRecSecs] = useState(28 * 60 + 56)
-  useEffect(() => {
-    if (!recording) return
-    const t = setInterval(() => setRecSecs(s => s + 1), 1000)
-    return () => clearInterval(t)
-  }, [recording])
+function StreamingPanel({ streaming, setStreaming }: { streaming: boolean; setStreaming: (v: boolean) => void }) {
+  const [dests, setDests] = useState<Dest[]>(DEFAULT_DESTS)
+  const enabled = dests.filter(d => d.on).length
+
+  const toggle = (i: number) => setDests(ds => ds.map((d, j) => j === i ? { ...d, on: !d.on } : d))
+  const goLive = () => {
+    if (streaming) { setStreaming(false); return }
+    if (enabled === 0) return
+    setStreaming(true)
+  }
 
   return (
     <Panel
-      title="Streaming & Recording"
-      right={<span className="flex items-center gap-1 text-[10px] text-red-400 font-bold"><Circle size={6} className="fill-red-500 text-red-500" /> REC</span>}
+      title="Streaming"
+      right={<span className="text-[10px] text-white/40">{enabled} selected</span>}
       className="h-[230px]"
     >
-      <div className="flex gap-3 p-3 h-full">
-        <div className="flex-1 space-y-1.5">
-          {streams.map((s, i) => (
+      <div className="flex flex-col h-full p-3 gap-2">
+        <div className="flex-1 space-y-1.5 overflow-y-auto">
+          {dests.map((s, i) => (
             <button
               key={s.name}
-              onClick={() => setStreams(st => st.map((x, j) => j === i ? { ...x, on: !x.on } : x))}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04]"
+              onClick={() => toggle(i)}
+              disabled={streaming}
+              className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-colors',
+                s.on ? 'bg-emerald-600/10 border-emerald-500/25' : 'bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]',
+                streaming && 'opacity-70 cursor-not-allowed')}
             >
               <span className={cn('w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white', s.color)}>{s.name.charAt(0)}</span>
               <span className="text-[11px] text-white/70 flex-1 truncate text-left">{s.name}</span>
-              <span className={cn('w-7 h-3.5 rounded-full relative transition-colors', s.on ? 'bg-emerald-500/80' : 'bg-white/15')}>
-                <span className={cn('absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all', s.on ? 'left-3.5' : 'left-0.5')} />
-              </span>
+              {streaming && s.on
+                ? <span className="flex items-center gap-1 text-[8px] font-bold text-red-400"><Circle size={5} className="fill-red-500 text-red-500 live-dot" /> LIVE</span>
+                : <span className={cn('w-7 h-3.5 rounded-full relative transition-colors', s.on ? 'bg-emerald-500/80' : 'bg-white/15')}>
+                    <span className={cn('absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all', s.on ? 'left-3.5' : 'left-0.5')} />
+                  </span>}
             </button>
           ))}
         </div>
-        <div className="w-[110px] rounded-lg bg-red-950/20 border border-red-500/20 p-2.5 flex flex-col items-center">
-          <span className="flex items-center gap-1 text-[10px] font-bold text-red-400"><Circle size={6} className={cn('text-red-500 fill-red-500', recording && 'live-dot')} /> {recording ? 'LIVE' : 'IDLE'}</span>
-          <div className="text-[10px] text-white/50 mt-2">Recording</div>
-          <div className="text-[13px] font-mono font-bold text-white tabular-nums">{fmtClock(recSecs)}</div>
-          <div className="flex gap-1.5 mt-2.5">
-            <button onClick={() => setRecording(r => !r)} className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center">
-              {recording ? <span className="w-2.5 h-2.5 bg-white rounded-[2px]" /> : <Circle size={12} className="fill-white text-white" />}
-            </button>
-            <button className="w-8 h-8 rounded-full bg-white/[0.08] flex items-center justify-center"><Pause size={13} className="text-white/70" /></button>
-          </div>
-          <div className="text-[9px] text-white/40 mt-2.5">File Size</div>
-          <div className="text-[11px] font-mono text-white/70">{(recSecs * 0.0014).toFixed(2)} GB</div>
-        </div>
+        <button
+          onClick={goLive}
+          disabled={!streaming && enabled === 0}
+          className={cn('w-full py-2 rounded-lg text-[12px] font-bold tracking-wide transition-colors flex items-center justify-center gap-2',
+            streaming ? 'bg-red-600 text-white hover:bg-red-500'
+              : enabled > 0 ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+              : 'bg-white/[0.05] text-white/25 cursor-not-allowed')}
+        >
+          {streaming ? <><Circle size={9} className="fill-white" /> Stop Stream</> : <><Radio size={13} /> Go Live{enabled > 0 ? ` · ${enabled}` : ''}</>}
+        </button>
       </div>
     </Panel>
   )
@@ -830,16 +895,8 @@ function MultiView() {
 
 // ── Live chat (functional input) ───────────────────────────────────────────
 
-const INITIAL_CHAT = [
-  { name: 'Sarah J.',   msg: 'This is powerful!! 🙌' },
-  { name: 'Michael T.', msg: 'Glory to God! 🙏' },
-  { name: 'James K.',   msg: 'Amen! 🙏' },
-  { name: 'Grace A.',   msg: 'So blessed today 💜' },
-  { name: 'David P.',   msg: 'Hallelujah! 🙌' },
-]
-
 function LiveChat() {
-  const [chat, setChat] = useState(INITIAL_CHAT)
+  const [chat, setChat] = useState<{ name: string; msg: string }[]>([])
   const [draft, setDraft] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const send = () => {
@@ -852,14 +909,20 @@ function LiveChat() {
   return (
     <Panel
       title="Live Chat"
-      right={<span className="flex items-center gap-1 text-[10px] text-emerald-400"><Users size={11} /> {428 + chat.length - INITIAL_CHAT.length}</span>}
+      right={<span className="flex items-center gap-1 text-[10px] text-white/40"><Users size={11} /> {chat.length}</span>}
       className="h-[230px]"
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {chat.map((c, i) => (
+          {chat.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-white/25">
+              <MessageSquare size={22} className="mb-2 opacity-40" />
+              <p className="text-[11px]">No messages yet</p>
+              <p className="text-[9px] text-white/15 mt-0.5">Connect a platform to sync live chat</p>
+            </div>
+          ) : chat.map((c, i) => (
             <div key={i} className="flex items-start gap-2">
-              <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0', c.name === 'You' ? 'bg-purple-600' : 'bg-gradient-to-br from-purple-500 to-orange-500')}>{c.name.charAt(0)}</div>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 bg-purple-600">{c.name.charAt(0)}</div>
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold text-white/75">{c.name}</div>
                 <div className="text-[11px] text-white/50">{c.msg}</div>
@@ -885,19 +948,17 @@ function LiveChat() {
 
 // ── Bottom status bar ──────────────────────────────────────────────────────
 
-function BottomBar({ sourceCount }: { sourceCount: number }) {
+function BottomBar({ sourceCount, streaming }: { sourceCount: number; streaming: boolean }) {
   return (
     <footer className="h-7 shrink-0 flex items-center justify-between px-4 bg-[#0a0a12] border-t border-white/[0.06] text-[10.5px] text-white/45">
       <div className="flex items-center gap-4">
         <span className="flex items-center gap-1.5 font-semibold text-white/65"><Crown size={11} className="text-purple-400" /> GloryCast OS v1.0.0</span>
-        <span className="flex items-center gap-1 text-emerald-400"><Circle size={5} className="fill-emerald-400 text-emerald-400" /> Online</span>
+        <span className="flex items-center gap-1 text-emerald-400"><Circle size={5} className="fill-emerald-400 text-emerald-400" /> Ready</span>
       </div>
       <div className="flex items-center gap-5">
-        <span>Project: <b className="text-white/65 font-medium">Sunday Service</b></span>
         <span>Sources: <b className="text-white/65 font-medium">{sourceCount}</b></span>
-        <span>Resolution: <b className="text-white/65 font-medium">1080p60</b></span>
-        <span>FPS: <b className="text-white/65 font-medium">60</b></span>
-        <span>Memory: <b className="text-white/65 font-medium">6.2 GB / 16 GB</b></span>
+        <span>Output: <b className="text-white/65 font-medium">1080p60</b></span>
+        <span>Stream: {streaming ? <b className="text-red-400 font-medium">● Live</b> : <b className="text-white/50 font-medium">Standby</b>}</span>
       </div>
       <span className="flex items-center gap-1.5">Auto Save: <b className="text-emerald-400">Enabled</b> <Circle size={5} className="fill-emerald-400 text-emerald-400" /></span>
     </footer>

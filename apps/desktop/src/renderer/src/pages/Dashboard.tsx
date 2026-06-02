@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   MonitorPlay, Video, Sparkles, Radio, BookOpen, Users,
-  Clock, ChevronRight, Globe, Eye, Calendar, Gauge,
+  Clock, ChevronRight, Eye, Calendar, Gauge,
   Wifi, WifiOff, CheckCircle2, ArrowRight,
   SlidersHorizontal, Cast, Mic2,
 } from 'lucide-react'
@@ -201,8 +201,7 @@ function LiveDashboard({ elapsed, totalViewers, avgHealth, totalBitrate }: {
 
       {/* Ops row */}
       <motion.div variants={fadeUp} className="grid grid-cols-12 gap-4">
-        <div className="col-span-7"><DestinationsCard totalViewers={totalViewers} /></div>
-        <div className="col-span-5"><NextServiceCard /></div>
+        <div className="col-span-12"><DestinationsCard totalViewers={totalViewers} /></div>
       </motion.div>
     </>
   )
@@ -304,10 +303,9 @@ function IdleDashboard({ now }: { now: number }) {
         </div>
       </motion.div>
 
-      {/* Destinations + next service */}
+      {/* Destinations */}
       <motion.div variants={fadeUp} className="grid grid-cols-12 gap-4">
-        <div className="col-span-7"><DestinationsCard totalViewers={0} /></div>
-        <div className="col-span-5"><NextServiceCard /></div>
+        <div className="col-span-12"><DestinationsCard totalViewers={0} /></div>
       </motion.div>
 
       {/* Quick launch */}
@@ -439,50 +437,6 @@ function DestinationsCard({ totalViewers }: { totalViewers: number }) {
           )
         })}
       </div>
-    </div>
-  )
-}
-
-// ── Next service card (live-mode compact) ──────────────────────────────────────
-
-function NextServiceCard() {
-  const navigate = useNavigate()
-  const { upcomingService } = useAppStore()
-  const serviceDate = upcomingService ? new Date(upcomingService.date) : null
-
-  return (
-    <div className="card-premium p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-white/85">Next Service</h3>
-        <Calendar size={14} className="text-white/25" />
-      </div>
-
-      {upcomingService && serviceDate ? (
-        <div className="glass rounded-xl p-3.5 border border-purple-500/15">
-          <div className="text-sm font-semibold text-white/85 mb-0.5">{upcomingService.title}</div>
-          {upcomingService.speakerName && (
-            <div className="text-[11px] text-white/40 mb-2">{upcomingService.speakerName}</div>
-          )}
-          <div className="flex items-center gap-3 text-[11px] text-white/40">
-            <span className="flex items-center gap-1"><Calendar size={10} />
-              {serviceDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-            </span>
-            <span className="flex items-center gap-1"><Clock size={10} />
-              {serviceDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="text-xs text-white/30">No upcoming service scheduled.</div>
-      )}
-
-      <div className="flex-1" />
-      <button
-        onClick={() => navigate('/bible')}
-        className="mt-2 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-colors"
-      >
-        <Globe size={12} /> Bible Engine · 20 languages
-      </button>
     </div>
   )
 }

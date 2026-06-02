@@ -34,23 +34,32 @@ class GloryCastMediaEngine extends EventEmitter implements MediaEngine {
   private activeDevices: Map<string, ChildProcess> = new Map()
   private initialized = false
 
+  /** True once FFmpeg has been detected — RTMP restream needs it. */
+  ffmpegAvailable = false
+
   async initialize(): Promise<void> {
     if (this.initialized) return
 
-    // Verify FFmpeg availability
-    await this.checkFFmpeg()
+    // FFmpeg is only required for server-side RTMP restreaming. The app (camera
+    // capture, switching, projection, recording in the renderer) works without
+    // it, so a missing binary must NOT prevent the app from launching.
+    this.ffmpegAvailable = await this.checkFFmpeg()
+    if (!this.ffmpegAvailable) {
+      console.warn('[MediaEngine] FFmpeg not found — RTMP restream disabled. Install FFmpeg to enable it.')
+    }
     this.initialized = true
     this.emit('ready')
   }
 
-  private checkFFmpeg(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn('ffmpeg', ['-version'], { stdio: 'pipe' })
-      proc.on('close', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error('FFmpeg not found. Please install FFmpeg to enable media features.'))
-      })
-      proc.on('error', () => reject(new Error('FFmpeg not found')))
+  private checkFFmpeg(): Promise<boolean> {
+    return new Promise((resolve) => {
+      try {
+        const proc = spawn('ffmpeg', ['-version'], { stdio: 'pipe' })
+        proc.on('close', (code) => resolve(code === 0))
+        proc.on('error', () => resolve(false))
+      } catch {
+        resolve(false)
+      }
     })
   }
 
