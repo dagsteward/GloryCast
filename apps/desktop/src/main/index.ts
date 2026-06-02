@@ -11,6 +11,13 @@ process.env.VITE_PUBLIC = app.isPackaged
   ? process.env.DIST
   : join(process.env.DIST, '../public')
 
+// In development, always load the live Vite dev server so the window never
+// serves stale hashed bundles from a previous `vite build`. Falls back to the
+// explicit env var, then to a sensible default dev port.
+const DEV_SERVER_URL =
+  process.env.VITE_DEV_SERVER_URL ||
+  (process.env.NODE_ENV === 'development' ? 'http://localhost:5173/' : '')
+
 let mainWindow: BrowserWindow | null = null
 let stageDisplayWindow: BrowserWindow | null = null
 let confidenceMonitorWindow: BrowserWindow | null = null
@@ -53,8 +60,8 @@ function createMainWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+  if (DEV_SERVER_URL) {
+    mainWindow.loadURL(DEV_SERVER_URL)
   } else {
     mainWindow.loadFile(join(process.env.DIST!, 'renderer/index.html'))
   }
@@ -83,12 +90,8 @@ function createStageDisplay(): BrowserWindow {
     skipTaskbar: true,
   })
 
-  const url = process.env.VITE_DEV_SERVER_URL
-    ? `${process.env.VITE_DEV_SERVER_URL}#/stage-display`
-    : join(process.env.DIST!, 'renderer/index.html#/stage-display')
-
-  if (process.env.VITE_DEV_SERVER_URL) {
-    stageDisplayWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#stage-display`)
+  if (DEV_SERVER_URL) {
+    stageDisplayWindow.loadURL(`${DEV_SERVER_URL}#/stage-display`)
   } else {
     stageDisplayWindow.loadFile(join(process.env.DIST!, 'renderer/index.html'), {
       hash: 'stage-display',

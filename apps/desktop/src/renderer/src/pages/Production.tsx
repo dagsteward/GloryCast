@@ -91,6 +91,8 @@ export function ProductionPage() {
       me.assignToProgram(bars)
       me.assignToPreview(clock)
     }
+    // Turn the always-listening AI Copilot on so scripture detection works here.
+    useServiceStore.getState().setAiListening(true)
   }, [])
 
   // Verse graphic overlaid on Program (set by the AI assistant actions).
@@ -176,6 +178,7 @@ function IconBtn({ icon: Icon, badge }: { icon: typeof Bell; badge?: string }) {
 // ── Left scene / nav rail ──────────────────────────────────────────────────
 
 const NAV = [
+  { icon: LayoutGrid,        label: 'Dashboard',        path: '/dashboard' },
   { icon: Video,             label: 'Production',       active: true,  path: '/production' },
   { icon: Film,              label: 'Media Library',    path: '/presentation' },
   { icon: Music2,            label: 'Worship',          path: '/presentation' },
@@ -302,7 +305,7 @@ function ProgramMonitor({ elapsed, verse, clearVerse }: {
         <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prog?.label ?? '1080p60'}</span>
       </div>
       <div className="relative aspect-video">
-        <SourceVideo id={programId} type={prog?.type} label={prog?.label ?? 'No Program'} className="w-full h-full" />
+        <SourceVideo key={programId ?? 'none'} id={programId} type={prog?.type} label={prog?.label ?? 'No Program'} className="w-full h-full" />
         {verse && (
           <div className="absolute bottom-0 left-0 right-0 p-5">
             <div className="border-l-[3px] border-purple-400 pl-4 group">
@@ -342,7 +345,7 @@ function PreviewMonitor() {
         <span className="text-[12px] font-bold text-emerald-300/90">PREVIEW</span>
         <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prev?.label ?? '—'}</span>
       </div>
-      <SourceVideo id={previewId} type={prev?.type} label={prev?.label ?? 'Select a source below'} className="aspect-video" />
+      <SourceVideo key={previewId ?? 'none'} id={previewId} type={prev?.type} label={prev?.label ?? 'Select a source below'} className="aspect-video" />
       <div className="px-3 py-2.5 bg-[#0c0c15] space-y-2.5">
         <div className="grid grid-cols-4 gap-1.5">
           {TRANSITIONS.map(t => (
@@ -377,12 +380,13 @@ function PreviewMonitor() {
 
 // ── Sources panel (real, switchable) ───────────────────────────────────────
 
+const ALL_TYPES: SourceType[] = ['camera', 'screen', 'media', 'pattern', 'image', 'color', 'timer', 'clock', 'ndi', 'network']
 const CATEGORIES: { label: string; types: SourceType[] }[] = [
-  { label: 'VIDEO SOURCES',   types: ['camera', 'screen', 'pattern'] },
-  { label: 'MEDIA SOURCES',   types: ['media', 'image', 'color'] },
-  { label: 'NDI SOURCES',     types: ['ndi', 'network'] },
-  { label: 'CAPTURE CARDS',   types: ['camera'] },
-  { label: 'VIRTUAL SOURCES', types: ['color', 'timer', 'clock', 'pattern', 'image'] },
+  { label: 'ALL SOURCES',     types: ALL_TYPES },
+  { label: 'VIDEO',           types: ['camera', 'screen', 'pattern'] },
+  { label: 'MEDIA',           types: ['media', 'image', 'color'] },
+  { label: 'NDI / NETWORK',   types: ['ndi', 'network'] },
+  { label: 'VIRTUAL',         types: ['color', 'timer', 'clock', 'pattern', 'image'] },
 ]
 
 const SOURCE_ICON: Record<string, typeof Camera> = {
@@ -406,17 +410,30 @@ function SourcesPanel() {
   const cat = CATEGORIES[tab]
   const list = sources.filter(s => cat.types.includes(s.type))
 
+  // After adding, reveal it: jump to ALL and load it onto Preview.
+  const reveal = (id: string | null) => {
+    setMenuOpen(false)
+    setTab(0)
+    if (id) useMediaEngine.getState().assignToPreview(id)
+  }
+  const [camError, setCamError] = useState<string | null>(null)
+
   const addCamera = async () => {
     const me = useMediaEngine.getState()
-    if (me.permissionState !== 'granted') await me.requestPermission()
-    await me.addCamera('default', 'Camera')
-    setMenuOpen(false)
+    setCamError(null)
+    if (me.permissionState !== 'granted') {
+      const ok = await me.requestPermission()
+      if (!ok) { setCamError('Camera/mic permission denied'); setMenuOpen(false); return }
+    }
+    const id = await me.addCamera('default', 'Camera')
+    if (!id) setCamError('No camera found')
+    reveal(id)
   }
-  const addScreen = async () => { await useMediaEngine.getState().addScreenSource(); setMenuOpen(false) }
-  const addColor  = () => { useMediaEngine.getState().addColorSource('#1e293b', 'Color'); setMenuOpen(false) }
-  const addClock  = () => { useMediaEngine.getState().addClockSource(); setMenuOpen(false) }
-  const addTimer  = () => { useMediaEngine.getState().addCountdownSource(5, 'Countdown'); setMenuOpen(false) }
-  const addBars   = () => { useMediaEngine.getState().addTestPattern(); setMenuOpen(false) }
+  const addScreen = async () => { reveal(await useMediaEngine.getState().addScreenSource()) }
+  const addColor  = () => reveal(useMediaEngine.getState().addColorSource('#1e293b', 'Color'))
+  const addClock  = () => reveal(useMediaEngine.getState().addClockSource())
+  const addTimer  = () => reveal(useMediaEngine.getState().addCountdownSource(5, 'Countdown'))
+  const addBars   = () => reveal(useMediaEngine.getState().addTestPattern())
 
   return (
     <Panel className="bg-[#0c0c15]">
@@ -455,8 +472,9 @@ function SourcesPanel() {
         </div>
       </div>
 
-      <input ref={fileRef} type="file" accept="video/*,audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) useMediaEngine.getState().addMediaFile(f); e.target.value = '' }} />
-      <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) useMediaEngine.getState().addImageSource(f); e.target.value = '' }} />
+      <input ref={fileRef} type="file" accept="video/*,audio/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) reveal(useMediaEngine.getState().addMediaFile(f)); e.target.value = '' }} />
+      <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) reveal(useMediaEngine.getState().addImageSource(f)); e.target.value = '' }} />
+      {camError && <div className="px-3 py-1 text-[10px] text-red-400 bg-red-500/10 border-b border-red-500/20">{camError}</div>}
 
       {list.length === 0 ? (
         <div className="p-8 text-center text-white/30">
@@ -652,15 +670,14 @@ function StagePanel() {
 
 // ── Bottom deck ────────────────────────────────────────────────────────────
 
+// Polling + Quiz Leaderboard live on the Webinar page, not the broadcast desk.
 function BottomDeck() {
   return (
     <div className="grid grid-cols-12 gap-3">
-      <div className="col-span-5"><AudioMixer /></div>
+      <div className="col-span-6"><AudioMixer /></div>
       <div className="col-span-3"><StreamingPanel /></div>
-      <div className="col-span-4"><MultiView /></div>
-      <div className="col-span-5"><LiveChat /></div>
-      <div className="col-span-4"><Polling /></div>
-      <div className="col-span-3"><Leaderboard /></div>
+      <div className="col-span-3"><MultiView /></div>
+      <div className="col-span-12"><LiveChat /></div>
     </div>
   )
 }
@@ -860,77 +877,6 @@ function LiveChat() {
             className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-lg px-3 py-1.5 text-[11px] text-white/80 placeholder:text-white/25 outline-none focus:border-purple-500/40"
           />
           <button onClick={send} className="w-8 h-8 rounded-lg bg-purple-600 hover:bg-purple-500 flex items-center justify-center"><Send size={13} className="text-white" /></button>
-        </div>
-      </div>
-    </Panel>
-  )
-}
-
-// ── Polling ────────────────────────────────────────────────────────────────
-
-const POLL = [
-  { label: 'Facebook',       pct: 42, color: 'bg-blue-500' },
-  { label: 'Church Website', pct: 28, color: 'bg-emerald-500' },
-  { label: 'Friend',         pct: 18, color: 'bg-purple-500' },
-  { label: 'YouTube',        pct: 8,  color: 'bg-red-500' },
-  { label: 'Other',          pct: 4,  color: 'bg-orange-500' },
-]
-
-function Polling() {
-  return (
-    <Panel title="Polling" className="h-[230px]">
-      <div className="p-3 flex flex-col h-full">
-        <div className="text-[11px] text-white/55 mb-2.5">How did you hear about this event?</div>
-        <div className="space-y-2 flex-1">
-          {POLL.map(p => (
-            <div key={p.label}>
-              <div className="flex items-center justify-between text-[10px] mb-0.5">
-                <span className="text-white/60">{p.label}</span>
-                <span className="text-white/45 font-mono">{p.pct}%</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                <div className={cn('h-full rounded-full', p.color)} style={{ width: `${p.pct}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between text-[10px] pt-2 border-t border-white/[0.05] mt-2">
-          <span className="text-white/40">Total Votes: 1,245</span>
-          <span className="flex items-center gap-1 text-emerald-400"><Circle size={5} className="fill-emerald-400 text-emerald-400" /> Live</span>
-        </div>
-      </div>
-    </Panel>
-  )
-}
-
-// ── Leaderboard ────────────────────────────────────────────────────────────
-
-const LEADERS = [
-  { rank: 1, name: 'David K.',   pts: 950 },
-  { rank: 2, name: 'Grace A.',   pts: 870 },
-  { rank: 3, name: 'Michael T.', pts: 760 },
-  { rank: 4, name: 'Sarah J.',   pts: 640 },
-  { rank: 5, name: 'James K.',   pts: 540 },
-]
-const MEDALS = ['bg-yellow-500', 'bg-slate-300', 'bg-amber-700']
-
-function Leaderboard() {
-  return (
-    <Panel title="Quiz Leaderboard" className="h-[230px]">
-      <div className="p-3 flex flex-col h-full">
-        <div className="space-y-1.5 flex-1">
-          {LEADERS.map(l => (
-            <div key={l.rank} className={cn('flex items-center gap-2.5 px-2 py-1.5 rounded-lg', l.rank <= 3 ? 'bg-white/[0.04]' : '')}>
-              <span className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold',
-                l.rank <= 3 ? `${MEDALS[l.rank - 1]} text-black` : 'text-white/40')}>{l.rank}</span>
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-orange-500 flex items-center justify-center text-[9px] font-bold">{l.name.charAt(0)}</div>
-              <span className="text-[12px] text-white/75 flex-1 truncate">{l.name}</span>
-              <span className="text-[11px] font-bold text-purple-300 font-mono">{l.pts} pts</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-white/40 pt-2 border-t border-white/[0.05] mt-2">
-          <Plus size={11} /> Participants: 1,204
         </div>
       </div>
     </Panel>

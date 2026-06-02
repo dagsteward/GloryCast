@@ -20,12 +20,13 @@ export function App() {
           {/* Stage display runs fullscreen on second monitor */}
           <Route path="/stage-display" element={<StageDisplayPage />} />
 
-          {/* Production is a full-screen broadcast control room with its own chrome */}
+          {/* Production is the landing page — a full-screen control room with its own chrome */}
+          <Route path="/" element={<ProductionPage />} />
           <Route path="/production" element={<ProductionPage />} />
 
           {/* Main app shell */}
           <Route element={<MainLayout />}>
-            <Route index element={<DashboardPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/presentation" element={<PresentationPage />} />
             <Route path="/webinar" element={<WebinarPage />} />
             <Route path="/engagement" element={<EngagementPage />} />

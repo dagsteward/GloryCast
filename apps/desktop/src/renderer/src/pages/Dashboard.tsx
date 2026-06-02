@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   MonitorPlay, Video, Sparkles, Radio, BookOpen, Users,
   Clock, ChevronRight, Globe, Eye, Calendar, Gauge,
-  Wifi, WifiOff, CheckCircle2, Play, Square, ArrowRight,
-  SlidersHorizontal, Cast, Mic2, Circle,
+  Wifi, WifiOff, CheckCircle2, ArrowRight,
+  SlidersHorizontal, Cast, Mic2,
 } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useServiceStore } from '../stores/serviceStore'
@@ -50,8 +50,6 @@ export function DashboardPage() {
   const serviceTitle     = useServiceStore(s => s.serviceTitle)
   const serviceStartedAt = useServiceStore(s => s.serviceStartedAt)
   const proMode          = useServiceStore(s => s.proMode)
-  const startService     = useServiceStore(s => s.startService)
-  const stopService      = useServiceStore(s => s.stopService)
   const setProMode       = useServiceStore(s => s.setProMode)
 
   const [now, setNow] = useState(Date.now())
@@ -59,15 +57,6 @@ export function DashboardPage() {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
-
-  const handleStart = () => {
-    startService()
-    useAppStore.getState().setIsStreaming(true)
-  }
-  const handleStop = () => {
-    stopService()
-    useAppStore.getState().resetStream()
-  }
 
   // Simulate destination viewer stats while a service is live.
   useEffect(() => {
@@ -162,15 +151,10 @@ export function DashboardPage() {
 
             <motion.button
               whileTap={{ scale: 0.96 }}
-              onClick={serviceActive ? handleStop : handleStart}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all',
-                serviceActive
-                  ? 'bg-red-600/15 text-red-400 border border-red-500/30 hover:bg-red-600/25'
-                  : 'bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-900/40',
-              )}
+              onClick={() => navigate('/production')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-purple-600 text-white hover:bg-purple-500 shadow-lg shadow-purple-900/30 transition-all"
             >
-              {serviceActive ? <><Square size={13} /> End Service</> : <><Play size={13} /> Go Live</>}
+              <Video size={14} /> Production Desk
             </motion.button>
           </div>
         </motion.div>
@@ -182,7 +166,7 @@ export function DashboardPage() {
               avgHealth={avgHealth}
               totalBitrate={totalBitrate}
             />
-          : <IdleDashboard now={now} onGoLive={handleStart} />}
+          : <IdleDashboard now={now} />}
       </motion.div>
     </div>
   )
@@ -217,9 +201,8 @@ function LiveDashboard({ elapsed, totalViewers, avgHealth, totalBitrate }: {
 
       {/* Ops row */}
       <motion.div variants={fadeUp} className="grid grid-cols-12 gap-4">
-        <div className="col-span-5"><ServicePlanCard /></div>
-        <div className="col-span-4"><DestinationsCard totalViewers={totalViewers} /></div>
-        <div className="col-span-3"><NextServiceCard /></div>
+        <div className="col-span-7"><DestinationsCard totalViewers={totalViewers} /></div>
+        <div className="col-span-5"><NextServiceCard /></div>
       </motion.div>
     </>
   )
@@ -229,7 +212,8 @@ function LiveDashboard({ elapsed, totalViewers, avgHealth, totalBitrate }: {
 // IDLE — premium pre-flight: hero + readiness, plan, quick launch
 // ═══════════════════════════════════════════════════════════════════════════
 
-function IdleDashboard({ now, onGoLive }: { now: number; onGoLive: () => void }) {
+function IdleDashboard({ now }: { now: number }) {
+  const navigate = useNavigate()
   const { upcomingService, destinations, connectionStatus } = useAppStore()
   const serviceDate = upcomingService ? new Date(upcomingService.date) : null
   const readyDests = destinations.filter(d => d.enabled).length
@@ -284,13 +268,13 @@ function IdleDashboard({ now, onGoLive }: { now: number; onGoLive: () => void })
               <motion.button
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={onGoLive}
-                className="flex items-center gap-2.5 px-6 py-3 rounded-xl text-base font-bold text-white bg-red-600 hover:bg-red-500 shadow-xl shadow-red-900/40 transition-colors"
+                onClick={() => navigate('/production')}
+                className="flex items-center gap-2.5 px-6 py-3 rounded-xl text-base font-bold text-white bg-purple-600 hover:bg-purple-500 shadow-xl shadow-purple-900/40 transition-colors"
               >
-                <Play size={17} /> Go Live Now
+                <Video size={17} /> Open Production Desk
               </motion.button>
               <p className="text-[12px] text-white/35 max-w-[230px] leading-relaxed">
-                Starts the stream and the AI Copilot — scripture & songs auto-queue to Preview.
+                Switch sources, run the AI Copilot, and go live from the broadcast control room.
               </p>
             </div>
           </div>
@@ -320,10 +304,10 @@ function IdleDashboard({ now, onGoLive }: { now: number; onGoLive: () => void })
         </div>
       </motion.div>
 
-      {/* Plan + destinations */}
+      {/* Destinations + next service */}
       <motion.div variants={fadeUp} className="grid grid-cols-12 gap-4">
-        <div className="col-span-8"><ServicePlanCard /></div>
-        <div className="col-span-4"><DestinationsCard totalViewers={0} /></div>
+        <div className="col-span-7"><DestinationsCard totalViewers={0} /></div>
+        <div className="col-span-5"><NextServiceCard /></div>
       </motion.div>
 
       {/* Quick launch */}
@@ -414,70 +398,6 @@ function ProgramBusCard() {
         >
           Clear
         </button>
-      </div>
-    </div>
-  )
-}
-
-// ── Service plan card (runsheet as a timeline) ─────────────────────────────────
-
-function ServicePlanCard() {
-  const segments = useServiceStore(s => s.segments)
-  const activeSegmentId = useServiceStore(s => s.activeSegmentId)
-  const toggleSegment   = useServiceStore(s => s.toggleSegment)
-  const setActiveSegment = useServiceStore(s => s.setActiveSegment)
-
-  const done = segments.filter(s => s.done).length
-  const pct = Math.round((done / segments.length) * 100)
-
-  return (
-    <div className="card-premium p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-white/85">Service Plan</h3>
-        <span className="text-[11px] text-white/35 font-mono">{done}/{segments.length}</span>
-      </div>
-
-      {/* progress rail */}
-      <div className="h-1 rounded-full bg-white/[0.05] mb-3 overflow-hidden">
-        <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-purple-500 to-emerald-500"
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.4 }}
-        />
-      </div>
-
-      <div className="flex-1 space-y-0.5">
-        {segments.map((seg, i) => {
-          const active = activeSegmentId === seg.id
-          return (
-            <button
-              key={seg.id}
-              onClick={() => setActiveSegment(seg.id)}
-              className={cn(
-                'w-full flex items-center gap-3 py-2 px-2.5 rounded-lg text-left transition-colors group',
-                active ? 'bg-purple-600/12 border border-purple-500/25' : 'border border-transparent hover:bg-white/[0.03]',
-              )}
-            >
-              <span
-                onClick={(e) => { e.stopPropagation(); toggleSegment(seg.id) }}
-                className={cn(
-                  'w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors text-[10px] font-mono',
-                  seg.done ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'border-white/15 text-white/30 group-hover:border-white/35',
-                )}
-              >
-                {seg.done ? <CheckCircle2 size={12} /> : i + 1}
-              </span>
-              <span className={cn('text-[13px] flex-1', seg.done ? 'text-white/35 line-through' : active ? 'text-white/90' : 'text-white/65')}>
-                {seg.label}
-              </span>
-              {active && (
-                <span className="flex items-center gap-1 text-[9px] text-purple-300 font-semibold uppercase tracking-wide">
-                  <Circle size={6} className="fill-purple-400 text-purple-400" /> Now
-                </span>
-              )}
-            </button>
-          )
-        })}
       </div>
     </div>
   )

@@ -8,7 +8,7 @@ import { useAppStore } from '../../stores/appStore'
 import { cn } from '../../lib/utils'
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard',    path: '/',            group: 'main'   },
+  { icon: LayoutDashboard, label: 'Dashboard',    path: '/dashboard',   group: 'main'   },
   { icon: MonitorPlay,     label: 'Presentation', path: '/presentation',group: 'main'   },
   { icon: Video,           label: 'Production',   path: '/production',  group: 'main'   },
   { icon: Radio,           label: 'Webinar',      path: '/webinar',     group: 'main'   },
