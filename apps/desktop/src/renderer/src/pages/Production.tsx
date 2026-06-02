@@ -74,24 +74,12 @@ export function ProductionPage() {
     return () => clearInterval(t)
   }, [])
 
-  // Seed a few real, live-streaming generated sources on first mount so the
-  // switcher is populated and fully functional out of the box (no hardware).
   const sources = useMediaEngine(s => s.sources)
-  const seeded = useRef(false)
   useEffect(() => {
-    if (seeded.current) return
-    seeded.current = true
-    const me = useMediaEngine.getState()
-    if (me.sources.length === 0) {
-      const clock = me.addClockSource()
-      const bars  = me.addTestPattern()
-      me.addCountdownSource(5, 'Countdown')
-      me.addColorSource('#7c3aed', 'Brand Purple')
-      me.addColorSource('#0f172a', 'Lower Third BG')
-      me.assignToProgram(bars)
-      me.assignToPreview(clock)
-    }
-    // Turn the always-listening AI Copilot on so scripture detection works here.
+    // Enumerate the machine's real cameras/mics up front, and turn on the
+    // always-listening AI Copilot so scripture detection works here. No demo
+    // sources are seeded — the producer adds their real inputs via Add Source.
+    useMediaEngine.getState().enumerateDevices()
     useServiceStore.getState().setAiListening(true)
   }, [])
 
