@@ -1,626 +1,771 @@
-import { useState, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  Radio, Wifi, Cpu, Scissors, TrendingDown,
-  Move, Maximize2, ExternalLink, BookOpen, ChevronLeft,
-  ChevronRight, Eye, Users, Clock, Zap, Music,
-  PanelTop, PanelBottom, PanelLeft, PanelRight, Square,
+  Crown, Menu, Bell, MessageSquare, HelpCircle, ChevronDown, Cpu, Wifi,
+  Video, Film, Music2, BookOpen, Sparkles, Users, Image as ImageIcon,
+  SlidersHorizontal, Play, Radio, MonitorSmartphone, Settings, Plus,
+  LayoutGrid, List, Eye, ThumbsUp, Clock, Mic, Brain, Send, FileText,
+  Scissors, RotateCw, Power, Pause, Circle, Link2, ChevronRight,
 } from 'lucide-react'
-import { useMediaEngine, getStream } from '../hooks/useMediaEngine'
-import { AudioMixer } from '../components/production/AudioMixer'
-import { StreamControls } from '../components/production/StreamControls'
-import { SourceGrid } from '../components/production/SourceGrid'
-import { CopilotFeed } from '../components/live/CopilotFeed'
-import { useServiceStore, type LiveItem, type OverlayLayout } from '../stores/serviceStore'
-import { SlideBackdrop } from '../components/bible/SlideBackdrop'
+import { useAiCopilot } from '../hooks/useAiCopilot'
 import { cn } from '../lib/utils'
 
-// ─── GraphicOverlay ─────────────────────────────────────────────────────────
-// Renders the live scripture/song graphic (the serviceStore bus) over a monitor.
-// The producer chooses how it composites via the overlay layout picker:
-//   • lower-third / top — a broadcast band pinned to an edge.
-//   • center / left / right — a positioned card over the live video.
-//   • full — a full-screen scripture slide with its chosen background.
-// When no video source sits behind the graphic, the chosen slide background is
-// painted so positioned overlays remain legible instead of floating on black.
-// The full verse is always shown (never truncated).
+// ═══════════════════════════════════════════════════════════════════════════
+// Production — full-screen cinematic broadcast control room (GloryCast OS)
+// Self-contained chrome: top status bar, left scene/nav rail, bottom status bar.
+// ═══════════════════════════════════════════════════════════════════════════
 
-const LAYOUT_ALIGN: Record<Exclude<OverlayLayout, 'full'>, string> = {
-  'lower-third': 'items-end justify-center',
-  top:           'items-start justify-center',
-  center:        'items-center justify-center',
-  left:          'items-center justify-start',
-  right:         'items-center justify-end',
-}
-
-function GraphicOverlay({
-  item,
-  variant,
-  hasVideo,
-  layout,
-}: {
-  item: LiveItem | null
-  variant: 'program' | 'preview'
-  hasVideo: boolean
-  layout: OverlayLayout
-}) {
-  if (!item || item.kind === 'blank') return null
-
-  const Icon = item.kind === 'song' ? Music : BookOpen
-  const iconColor = item.kind === 'song' ? 'text-blue-300' : 'text-purple-300'
-
-  // ── Full scripture slide ──
-  if (layout === 'full') {
-    return (
-      <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
-        <SlideBackdrop bgId={item.background} />
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-10 py-10">
-          <div className="flex items-center gap-2 mb-5">
-            <Icon size={16} className={cn(iconColor, 'shrink-0')} />
-            <span className="text-base font-bold text-white tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">{item.title}</span>
-            {item.subtitle && <span className="text-xs text-white/60 drop-shadow">{item.subtitle}</span>}
-          </div>
-          {item.body && (
-            <p className="max-w-3xl w-full text-white text-2xl leading-relaxed font-light max-h-full overflow-y-auto drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
-              {item.body}
-            </p>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // ── Positioned card (lower-third / top / center / left / right) ──
-  const edgeBand = layout === 'lower-third' || layout === 'top'
-
-  return (
-    <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
-      {/* Paint the slide background only when no live video sits behind it. */}
-      {!hasVideo && <SlideBackdrop bgId={item.background} />}
-      <div className={cn('absolute inset-0 flex p-3', LAYOUT_ALIGN[layout])}>
-        <div className={cn(
-          'rounded-lg backdrop-blur-md border px-3.5 py-2.5 max-h-[72%] overflow-y-auto drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]',
-          edgeBand ? 'w-[88%]' : 'max-w-[58%]',
-          variant === 'program'
-            ? 'bg-black/72 border-red-500/40'
-            : 'bg-black/55 border-emerald-500/40',
-        )}>
-          <div className="flex items-center gap-1.5 mb-1">
-            <Icon size={11} className={cn(iconColor, 'shrink-0')} />
-            <span className="text-[11px] font-bold text-white tracking-wide truncate">{item.title}</span>
-            {item.subtitle && <span className="text-[9px] text-white/45 shrink-0">{item.subtitle}</span>}
-          </div>
-          {item.body && (
-            <p className="text-[12px] text-white/85 leading-snug">{item.body}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── OverlayLayoutPicker ──────────────────────────────────────────────────────
-// Lets the producer choose how scripture/song graphics composite over output.
-
-const OVERLAY_OPTIONS: { id: OverlayLayout; label: string; icon: React.ReactNode }[] = [
-  { id: 'lower-third', label: 'Lower',  icon: <PanelBottom size={11} /> },
-  { id: 'top',         label: 'Top',    icon: <PanelTop size={11} /> },
-  { id: 'left',        label: 'Left',   icon: <PanelLeft size={11} /> },
-  { id: 'center',      label: 'Center', icon: <Square size={11} /> },
-  { id: 'right',       label: 'Right',  icon: <PanelRight size={11} /> },
-  { id: 'full',        label: 'Full',   icon: <Maximize2 size={11} /> },
+const ACCENT_GRADIENTS = [
+  'from-purple-900 via-indigo-800 to-fuchsia-900',
+  'from-blue-900 via-cyan-800 to-slate-900',
+  'from-orange-900 via-red-800 to-rose-900',
+  'from-emerald-900 via-teal-800 to-slate-900',
+  'from-violet-900 via-purple-800 to-indigo-900',
+  'from-rose-900 via-pink-800 to-purple-900',
 ]
 
-function OverlayLayoutPicker() {
-  const layout    = useServiceStore(s => s.overlayLayout)
-  const setLayout = useServiceStore(s => s.setOverlayLayout)
-
-  return (
-    <div className="shrink-0 bg-chrome rounded-xl border border-white/[0.06] p-2">
-      <div className="flex items-center gap-1 mb-1.5">
-        <Move size={9} className="text-white/30" />
-        <span className="text-[9px] text-white/35 uppercase tracking-widest">Overlay Position</span>
-      </div>
-      <div className="grid grid-cols-6 gap-1">
-        {OVERLAY_OPTIONS.map(o => (
-          <button key={o.id} onClick={() => setLayout(o.id)} title={`${o.label} overlay`}
-            className={cn(
-              'flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-[8px] font-semibold transition-colors',
-              layout === o.id
-                ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
-                : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04] border border-transparent',
-            )}>
-            {o.icon}
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
+function fmtClock(s: number) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
 }
-
-// ─── VideoPanel ───────────────────────────────────────────────────────────────
-// Renders a live MediaStream into a <video> element.
-
-function VideoPanel({
-  sourceId,
-  variant,
-  className,
-}: {
-  sourceId: string | null
-  variant: 'program' | 'preview'
-  className?: string
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const stream   = getStream(sourceId)
-
-  useEffect(() => {
-    const el = videoRef.current
-    if (!el) return
-    if (stream) { el.srcObject = stream; el.play().catch(() => {}) }
-    else el.srcObject = null
-    return () => { if (el) el.srcObject = null }
-  }, [sourceId, stream])
-
-  return (
-    <div className={cn(
-      'relative w-full h-full rounded-xl overflow-hidden border-2 bg-black flex items-center justify-center',
-      variant === 'program'
-        ? 'border-red-500/80 shadow-[0_0_24px_rgba(239,68,68,0.22)]'
-        : 'border-emerald-500/70 shadow-[0_0_18px_rgba(16,185,129,0.18)]',
-      className,
-    )}>
-      {stream ? (
-        <video
-          ref={videoRef}
-          autoPlay muted playsInline
-          className="w-full h-full object-contain"
-        />
-      ) : (
-        <div className="flex flex-col items-center gap-3 opacity-20">
-          <Radio size={36} className={variant === 'program' ? 'text-red-400' : 'text-emerald-400'} />
-          <p className="text-[11px] text-white/60">No source selected</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── StatusBar ────────────────────────────────────────────────────────────────
-
-function StatusBar() {
-  const serviceActive    = useServiceStore(s => s.serviceActive)
-  const serviceStartedAt = useServiceStore(s => s.serviceStartedAt)
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setElapsed(serviceStartedAt ? Math.floor((Date.now() - serviceStartedAt) / 1000) : 0)
-    }, 1000)
-    return () => clearInterval(id)
-  }, [serviceStartedAt])
-
-  const h = String(Math.floor(elapsed / 3600)).padStart(2, '0')
-  const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0')
-  const s = String(elapsed % 60).padStart(2, '0')
-
-  return (
-    <div className="flex items-center gap-4 px-4 border-b border-white/[0.06] bg-chrome shrink-0" style={{ height: '34px' }}>
-      {/* Live indicator */}
-      <div className={cn('flex items-center gap-1.5', serviceActive ? 'text-red-400' : 'text-white/30')}>
-        <span className={cn('w-2 h-2 rounded-full', serviceActive ? 'bg-red-400 animate-pulse' : 'bg-white/20')} />
-        <span className="text-[11px] font-bold tracking-wider">{serviceActive ? 'LIVE' : 'OFFLINE'}</span>
-      </div>
-
-      {/* Timer */}
-      <div className="flex items-center gap-1 text-white/40">
-        <Clock size={10} />
-        <span className="text-[11px] font-mono text-white/60">{h}:{m}:{s}</span>
-      </div>
-
-      <div className="h-3 w-px bg-white/10" />
-
-      {/* Stats */}
-      <div className="flex items-center gap-3 text-[10px] font-mono text-white/35">
-        <span className="flex items-center gap-1"><Zap size={9} className="text-yellow-400/60" />30 fps</span>
-        <span className="flex items-center gap-1"><Cpu size={9} className="text-blue-400/60" />CPU 18%</span>
-        <span className="flex items-center gap-1"><Wifi size={9} className="text-emerald-400/60" />↑ 6.2 Mbps</span>
-        <span className="flex items-center gap-1"><Users size={9} className="text-purple-400/60" />1,284 viewers</span>
-      </div>
-
-      <div className="flex-1" />
-
-      <StreamControls compact />
-    </div>
-  )
-}
-
-// ─── ProgramVUBars ────────────────────────────────────────────────────────────
-// Left-side VU bar column on PROGRAM monitor.
-
-function ProgramVUBars({ level }: { level: number }) {
-  const bars = [0.9, 0.7, 0.5, 0.3].map((weight, i) => {
-    const pct = Math.min(100, level * weight + Math.sin(Date.now() / 200 + i) * 3)
-    return pct
-  })
-
-  return (
-    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5" style={{ width: '6px' }}>
-      {bars.map((pct, i) => (
-        <div key={i} className="relative bg-white/[0.06] rounded-full overflow-hidden" style={{ width: '6px', height: '30px' }}>
-          <div
-            className={cn('absolute bottom-0 w-full rounded-full transition-all duration-100',
-              pct > 85 ? 'bg-red-500' : pct > 70 ? 'bg-yellow-400' : 'bg-emerald-400')}
-            style={{ height: `${pct}%` }}
-          />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── TransitionPanel ─────────────────────────────────────────────────────────
-
-type TransitionType = 'cut' | 'fade' | 'wipe' | 'move'
-
-const TRANSITION_ICONS: Record<TransitionType, React.ReactNode> = {
-  cut:  <Scissors size={10} />,
-  fade: <TrendingDown size={10} />,
-  wipe: <Maximize2 size={10} />,
-  move: <Move size={10} />,
-}
-
-function TransitionPanel() {
-  const { previewId, cutToProgram } = useMediaEngine()
-  const gfxPreview = useServiceStore(s => s.preview)
-  const takeGraphic = useServiceStore(s => s.take)
-  const [type,     setType]     = useState<TransitionType>('cut')
-  const [duration, setDuration] = useState(1.0)
-  const [fading,   setFading]   = useState(false)
-
-  // A TAKE promotes BOTH layers at once: the video bus (camera) and the
-  // graphics bus (scripture/song). Either or both may have something queued.
-  const canTake = !!previewId || !!gfxPreview
-
-  function handleTake() {
-    if (!canTake) return
-    const fire = () => {
-      if (previewId)  cutToProgram()  // video layer
-      if (gfxPreview) takeGraphic()   // graphics layer
-    }
-    if (type === 'cut') {
-      fire()
-    } else {
-      setFading(true)
-      setTimeout(() => { fire(); setFading(false) }, duration * 1000)
-    }
-  }
-
-  return (
-    <div className="shrink-0 bg-chrome rounded-xl border border-white/[0.06] p-2 flex flex-col gap-2">
-      {/* Transition type */}
-      <div className="flex gap-1">
-        {(['cut', 'fade', 'wipe', 'move'] as TransitionType[]).map(t => (
-          <button key={t} onClick={() => setType(t)}
-            className={cn(
-              'flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-[9px] font-semibold uppercase tracking-wide transition-colors',
-              type === t
-                ? 'bg-white/12 text-white/90 border border-white/15'
-                : 'text-white/25 hover:text-white/55 hover:bg-white/[0.04]',
-            )}>
-            {TRANSITION_ICONS[t]}
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {/* Duration */}
-      {type !== 'cut' && (
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-white/30 shrink-0">Dur</span>
-          <input
-            type="range" min={0.2} max={3.0} step={0.1} value={duration}
-            onChange={e => setDuration(Number(e.target.value))}
-            className="flex-1 accent-purple-500" style={{ height: '2px' }}
-          />
-          <span className="text-[9px] font-mono text-white/50 w-8 text-right">
-            {duration.toFixed(1)}s
-          </span>
-        </div>
-      )}
-
-      {/* TAKE button */}
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        onClick={handleTake}
-        disabled={!canTake || fading}
-        className={cn(
-          'w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all',
-          canTake && !fading
-            ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.35)]'
-            : 'bg-white/[0.05] text-white/20 cursor-not-allowed',
-        )}>
-        {fading ? 'TRANSITIONING…' : type === 'cut' ? '✂ CUT TO AIR' : `⟶ ${type.toUpperCase()} TO AIR`}
-      </motion.button>
-    </div>
-  )
-}
-
-// ─── AI Assistant panel (shared Copilot feed + stage readout) ──────────────────
-
-function AIPanel({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const program = useServiceStore(s => s.program)
-
-  return (
-    <div className={cn(
-      'flex flex-col shrink-0 border-l border-white/[0.05] bg-chrome transition-all duration-300',
-      collapsed ? 'w-8' : 'w-64',
-    )}>
-      {/* Toggle bar */}
-      <button
-        onClick={onToggle}
-        className="flex items-center justify-center border-b border-white/[0.05] text-white/25 hover:text-white/60 transition-colors shrink-0"
-        style={{ height: '34px' }}>
-        {collapsed
-          ? <ChevronRight size={12} />
-          : <div className="flex items-center gap-1.5 w-full px-3"><BookOpen size={10} /><span className="text-[9px] uppercase tracking-wider font-semibold text-white/40 flex-1">AI Copilot</span><ChevronLeft size={10} /></div>}
-      </button>
-
-      {!collapsed && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Shared AI Copilot feed — same engine as Dashboard */}
-          <div className="flex-1 overflow-hidden">
-            <CopilotFeed compact />
-          </div>
-
-          {/* Stage display — reflects the one shared Program bus */}
-          <div className="border-t border-white/[0.05] p-2.5 shrink-0">
-            <div className="flex items-center gap-1 mb-2">
-              <Eye size={9} className="text-blue-400" />
-              <span className="text-[8px] text-white/40 uppercase tracking-wide font-semibold">On Program</span>
-            </div>
-            <div className="rounded-lg bg-white/[0.03] border border-white/[0.05] p-2 text-center">
-              {program ? (
-                <>
-                  <p className="text-[9px] text-white/25 mb-1">Now on air</p>
-                  <p className="text-[10px] text-white/70 font-medium leading-snug">{program.title}</p>
-                  {program.subtitle && <p className="text-[8px] text-white/30 mt-0.5 italic">{program.subtitle}</p>}
-                </>
-              ) : (
-                <p className="text-[9px] text-white/20 py-1">Nothing on Program</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── MultiView grid (8-cell) ──────────────────────────────────────────────────
-
-function MultiViewGrid() {
-  const { sources, programId, previewId } = useMediaEngine()
-
-  // Up to 8 cells, padded with empties
-  const cells = [...sources.slice(0, 8), ...Array(Math.max(0, 8 - sources.length)).fill(null)]
-
-  return (
-    <div className="flex flex-col bg-chrome border-l border-white/[0.05]" style={{ width: '268px' }}>
-      <div className="px-3 border-b border-white/[0.05] flex items-center" style={{ height: '26px' }}>
-        <span className="text-[9px] font-semibold text-white/30 uppercase tracking-widest">Multi-View</span>
-      </div>
-      <div className="flex-1 grid grid-cols-4 grid-rows-2 gap-0.5 p-0.5">
-        {cells.map((src, i) => {
-          if (!src) return (
-            <div key={`empty-${i}`} className="rounded bg-black/50 border border-white/[0.04] flex items-center justify-center">
-              <span className="text-[7px] text-white/10">{i + 1}</span>
-            </div>
-          )
-          return <MultiViewCell key={src.id} sourceId={src.id} label={src.label} index={i}
-            isProgram={src.id === programId} isPreview={src.id === previewId} />
-        })}
-      </div>
-    </div>
-  )
-}
-
-function MultiViewCell({ sourceId, label, index, isProgram, isPreview }: {
-  sourceId: string; label: string; index: number; isProgram: boolean; isPreview: boolean
-}) {
-  const ref    = useRef<HTMLVideoElement>(null)
-  const stream = getStream(sourceId)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    if (stream) { el.srcObject = stream; el.play().catch(() => {}) }
-    else el.srcObject = null
-    return () => { if (el) el.srcObject = null }
-  }, [sourceId, stream])
-
-  return (
-    <div className={cn(
-      'relative rounded overflow-hidden border cursor-pointer bg-black',
-      isProgram ? 'border-red-500/70' :
-      isPreview  ? 'border-emerald-500/70' :
-                   'border-white/[0.06] hover:border-white/20',
-    )}>
-      {stream
-        ? <video ref={ref} autoPlay muted playsInline className="w-full h-full object-cover" />
-        : <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-            <span className="text-[7px] text-white/15 text-center px-0.5 leading-tight">{label}</span>
-          </div>}
-
-      <div className="absolute top-0.5 left-0.5 text-[6px] font-bold text-white/30 bg-black/50 rounded px-0.5">
-        {index + 1}
-      </div>
-
-      {isProgram && (
-        <div className="absolute bottom-0 left-0 right-0 h-3 bg-red-500/70 flex items-center justify-center">
-          <span className="text-[6px] font-bold text-white tracking-widest">PGM</span>
-        </div>
-      )}
-      {isPreview && !isProgram && (
-        <div className="absolute bottom-0 left-0 right-0 h-3 bg-emerald-500/70 flex items-center justify-center">
-          <span className="text-[6px] font-bold text-white tracking-widest">PVW</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Output window launcher ───────────────────────────────────────────────────
-
-function openOutputWindow(sourceId: string | null) {
-  if (!sourceId) return
-  const stream = getStream(sourceId)
-  if (!stream) return
-
-  const win = window.open('', '_blank', 'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no')
-  if (!win) return
-
-  win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <title>GloryCast — PROGRAM OUTPUT</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#000; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; }
-    video { width:100%; height:100%; object-fit:contain; }
-    .badge { position:fixed; top:10px; left:10px; background:#ef4444; color:#fff;
-             font-family:monospace; font-size:11px; font-weight:bold; padding:3px 8px;
-             border-radius:4px; letter-spacing:.1em; }
-  </style>
-</head>
-<body>
-  <video id="v" autoplay muted playsinline></video>
-  <div class="badge">● PROGRAM</div>
-</body>
-</html>`)
-  win.document.close()
-
-  const attach = () => {
-    const v = win.document.getElementById('v') as HTMLVideoElement | null
-    if (v) { v.srcObject = stream; v.play().catch(() => {}) }
-  }
-  win.onload = attach
-  setTimeout(attach, 300)
-}
-
-// ─── ProductionPage ────────────────────────────────────────────────────────────
 
 export function ProductionPage() {
-  const { sources, previewId, programId } = useMediaEngine()
-  const gfxProgram    = useServiceStore(s => s.program)
-  const gfxPreview    = useServiceStore(s => s.preview)
-  const overlayLayout = useServiceStore(s => s.overlayLayout)
-  const [aiCollapsed, setAiCollapsed] = useState(false)
-
-  // Simulated master level for program VU bars (bounces with activity)
-  const [pgmLevel, setPgmLevel] = useState(0)
+  useAiCopilot()
+  const [elapsed, setElapsed] = useState(28 * 60 + 56)
   useEffect(() => {
-    let frame = 0
-    const id = setInterval(() => {
-      frame++
-      if (programId) {
-        setPgmLevel(60 + Math.sin(frame * 0.3) * 25 + Math.random() * 10)
-      } else {
-        setPgmLevel(0)
-      }
-    }, 80)
-    return () => clearInterval(id)
-  }, [programId])
+    const t = setInterval(() => setElapsed(e => e + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-app">
-      {/* ── Status bar ───────────────────────────────────────────────────── */}
-      <StatusBar />
-
-      {/* ── Main area ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-
-        {/* PROGRAM + PREVIEW monitors */}
-        <div className="flex-1 flex gap-2 p-2 min-w-0 min-h-0">
-
-          {/* PROGRAM monitor (left, larger) */}
-          <div className="flex-[3] relative min-w-0 flex flex-col gap-0">
-            <div className="flex-1 relative">
-              <VideoPanel sourceId={programId} variant="program" className="h-full" />
-
-              {/* Live scripture/song graphic — composited per the chosen overlay layout */}
-              <GraphicOverlay item={gfxProgram} variant="program" hasVideo={!!programId} layout={overlayLayout} />
-
-              {/* LIVE badge */}
-              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-1 rounded bg-red-500 text-[10px] font-bold text-white tracking-widest z-10">
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                PROGRAM
-              </div>
-
-              {/* Viewer count */}
-              <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded bg-black/60 text-[10px] font-mono text-white/70 z-10">
-                <Users size={9} />
-                1,284
-              </div>
-
-              {/* Side VU bars */}
-              <ProgramVUBars level={pgmLevel} />
-
-              {/* Full output button */}
-              <button
-                onClick={() => openOutputWindow(programId)}
-                disabled={!programId}
-                className="absolute bottom-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded bg-black/60 hover:bg-black/80 text-white/50 hover:text-white/80 text-[9px] transition-all disabled:opacity-20 z-10">
-                <ExternalLink size={9} /> Full Output
-              </button>
-
-              {/* Source name */}
-              <div className="absolute bottom-2.5 left-2.5 text-[9px] font-mono text-white/30 z-10">
-                {programId ? sources.find(s => s.id === programId)?.label ?? programId : '—'}
-              </div>
-            </div>
-          </div>
-
-          {/* PREVIEW + transitions (right column) */}
-          <div className="flex-[2] flex flex-col gap-2 min-w-0">
-            {/* PREVIEW monitor (top of right column) */}
-            <div className="flex-1 relative">
-              <VideoPanel sourceId={previewId} variant="preview" className="h-full" />
-
-              {/* Previewed scripture/song graphic — composited per the chosen overlay layout */}
-              <GraphicOverlay item={gfxPreview} variant="preview" hasVideo={!!previewId} layout={overlayLayout} />
-
-              {/* PREVIEW badge */}
-              <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-[9px] font-bold text-white tracking-widest z-10">
-                PREVIEW
-              </div>
-
-              {/* Source name */}
-              <div className="absolute bottom-2 left-2 text-[9px] font-mono text-white/30 z-10">
-                {previewId ? sources.find(s => s.id === previewId)?.label ?? previewId : '—'}
-              </div>
-            </div>
-
-            {/* Overlay position + transition controls */}
-            <OverlayLayoutPicker />
-            <TransitionPanel />
+    <div className="w-full h-full flex flex-col bg-[#070709] text-white/90 overflow-hidden select-none">
+      <TopBar elapsed={elapsed} />
+      <div className="flex-1 flex min-h-0">
+        <SceneRail />
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+            <TopDeck elapsed={elapsed} />
+            <BottomDeck />
           </div>
         </div>
+      </div>
+      <BottomBar />
+    </div>
+  )
+}
 
-        {/* AI Assistant + Stage Display (collapsible right panel) */}
-        <AIPanel collapsed={aiCollapsed} onToggle={() => setAiCollapsed(v => !v)} />
+// ── Top status bar ─────────────────────────────────────────────────────────
+
+function TopBar({ elapsed }: { elapsed: number }) {
+  return (
+    <header className="h-14 shrink-0 flex items-center justify-between px-4 bg-gradient-to-b from-[#0c0c14] to-[#090910] border-b border-white/[0.06]">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-purple-900/40">
+          <Crown size={18} className="text-white" />
+        </div>
+        <div className="leading-none">
+          <div className="text-[15px] font-extrabold tracking-tight">GloryCast OS</div>
+          <div className="text-[9px] tracking-[0.25em] text-purple-300/60 font-semibold mt-0.5">CINEMATIC BROADCAST</div>
+        </div>
+        <button className="ml-2 w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/40">
+          <Menu size={17} />
+        </button>
       </div>
 
-      {/* ── Source grid (tabbed) ──────────────────────────────────────────── */}
-      <SourceGrid />
+      <div className="flex items-center gap-5 text-[12px]">
+        <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30">
+          <span className="live-dot w-2 h-2 rounded-full bg-red-500" />
+          <span className="font-bold text-red-400">LIVE</span>
+          <span className="font-mono text-red-400/80 tabular-nums">{fmtClock(elapsed)}</span>
+        </span>
+        <span className="flex items-center gap-1.5 text-white/55"><Cpu size={13} className="text-cyan-400" /> CPU <b className="text-white/80 font-semibold">23%</b></span>
+        <span className="flex items-center gap-1.5 text-white/55"><Film size={13} className="text-emerald-400" /> FPS <b className="text-white/80 font-semibold">60</b></span>
+        <span className="flex items-center gap-1.5 text-white/55"><Wifi size={13} className="text-emerald-400" /> Internet <b className="text-emerald-400 font-semibold">Excellent</b></span>
+      </div>
 
-      {/* ── Bottom bar: Audio Mixer + MultiView ──────────────────────────── */}
-      <div className="shrink-0 flex border-t border-white/[0.05]" style={{ height: '186px' }}>
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <AudioMixer compact />
+      <div className="flex items-center gap-3">
+        <IconBtn icon={Bell} badge="12" />
+        <IconBtn icon={MessageSquare} />
+        <IconBtn icon={HelpCircle} />
+        <div className="flex items-center gap-2 pl-2 ml-1 border-l border-white/10">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-orange-500 flex items-center justify-center text-[11px] font-bold">DA</div>
+          <div className="leading-none">
+            <div className="text-[12px] font-semibold">Daniel Admin</div>
+            <div className="text-[9px] text-white/40 mt-0.5">Super Admin</div>
+          </div>
+          <ChevronDown size={14} className="text-white/40" />
         </div>
-        <MultiViewGrid />
+      </div>
+    </header>
+  )
+}
+
+function IconBtn({ icon: Icon, badge }: { icon: typeof Bell; badge?: string }) {
+  return (
+    <button className="relative w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/50">
+      <Icon size={17} />
+      {badge && (
+        <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">{badge}</span>
+      )}
+    </button>
+  )
+}
+
+// ── Left scene / nav rail ──────────────────────────────────────────────────
+
+const NAV = [
+  { icon: Video,             label: 'Production',       active: true,  path: '/production' },
+  { icon: Film,              label: 'Media Library',    path: '/presentation' },
+  { icon: Music2,            label: 'Worship',          path: '/presentation' },
+  { icon: BookOpen,          label: 'Bible',            path: '/bible' },
+  { icon: Sparkles,          label: 'AI Studio',        path: '/ai-studio' },
+  { icon: Users,             label: 'Webinar & Guests', path: '/webinar' },
+  { icon: ImageIcon,         label: 'Graphics',         path: '/presentation' },
+  { icon: SlidersHorizontal, label: 'Audio Mixer',      path: '/production' },
+  { icon: Play,              label: 'Playback',         path: '/production' },
+  { icon: Radio,             label: 'Stream & Record',  path: '/production' },
+  { icon: MonitorSmartphone, label: 'Stage Display',    path: '/stage-display' },
+  { icon: Settings,          label: 'Settings',         path: '/settings' },
+]
+
+const SCENES = [
+  'Worship Intro', 'Praise & Worship', 'Scripture Reading', 'Sermon',
+  'Prayer', 'Offering', 'Announcements', 'Closing',
+]
+
+function SceneRail() {
+  const navigate = useNavigate()
+  const [active, setActive] = useState(0)
+  return (
+    <aside className="w-52 shrink-0 flex flex-col bg-[#0a0a12] border-r border-white/[0.06] overflow-y-auto">
+      <nav className="p-2 space-y-0.5">
+        {NAV.map(({ icon: Icon, label, active: on, path }) => (
+          <button
+            key={label}
+            onClick={() => navigate(path)}
+            className={cn(
+              'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12.5px] font-medium transition-colors',
+              on ? 'bg-gradient-to-r from-purple-600/40 to-purple-600/10 text-white border border-purple-500/30'
+                 : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04] border border-transparent',
+            )}
+          >
+            <Icon size={15} className={on ? 'text-purple-300' : ''} />
+            <span className="flex-1 text-left">{label}</span>
+            {on && <ChevronRight size={13} className="text-purple-300/70" />}
+          </button>
+        ))}
+      </nav>
+
+      <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold">Scenes</span>
+        <button className="w-5 h-5 rounded-md bg-white/[0.06] hover:bg-white/10 flex items-center justify-center text-white/50">
+          <Plus size={12} />
+        </button>
+      </div>
+      <div className="px-2 pb-3 space-y-0.5">
+        {SCENES.map((name, i) => (
+          <button
+            key={name}
+            onClick={() => setActive(i)}
+            className={cn(
+              'w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors',
+              active === i ? 'bg-purple-600/25 text-white border border-purple-500/30'
+                           : 'text-white/50 hover:bg-white/[0.04] border border-transparent',
+            )}
+          >
+            <span className={cn('w-4 text-center text-[11px] font-mono', active === i ? 'text-purple-300' : 'text-white/30')}>{i + 1}</span>
+            <span className="flex-1 text-left truncate">{name}</span>
+            {active === i
+              ? <Play size={11} className="text-purple-300 fill-purple-300" />
+              : <ChevronRight size={11} className="text-white/20" />}
+          </button>
+        ))}
+      </div>
+    </aside>
+  )
+}
+
+// ── Reusable feed tile (simulated camera/source) ───────────────────────────
+
+function Feed({ gradient, children, className }: { gradient: string; children?: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('relative overflow-hidden bg-gradient-to-br', gradient, className)}>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,255,255,0.12),transparent_60%)]" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+      {children}
+    </div>
+  )
+}
+
+function Panel({ title, right, children, className, bodyClass }: {
+  title?: string; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string
+}) {
+  return (
+    <section className={cn('rounded-xl bg-[#0c0c15] border border-white/[0.06] flex flex-col min-h-0', className)}>
+      {title && (
+        <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-white/[0.05]">
+          <h3 className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">{title}</h3>
+          {right}
+        </div>
+      )}
+      <div className={cn('flex-1 min-h-0', bodyClass)}>{children}</div>
+    </section>
+  )
+}
+
+// ── Top deck: PROGRAM / PREVIEW / AI / STAGE + sources ─────────────────────
+
+function TopDeck({ elapsed }: { elapsed: number }) {
+  return (
+    <div className="grid grid-cols-12 gap-3">
+      <div className="col-span-7 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <ProgramMonitor elapsed={elapsed} />
+          <PreviewMonitor />
+        </div>
+        <SourcesPanel />
+      </div>
+      <div className="col-span-2"><AiAssistant /></div>
+      <div className="col-span-3"><StagePanel /></div>
+    </div>
+  )
+}
+
+function VerseLowerThird() {
+  return (
+    <div className="absolute bottom-0 left-0 right-0 p-5">
+      <div className="border-l-[3px] border-purple-400 pl-4">
+        <div className="text-3xl font-bold text-white drop-shadow-lg">Romans <span className="text-purple-300">8:28</span></div>
+        <p className="text-[15px] text-white/90 leading-snug mt-1 max-w-[92%] drop-shadow">
+          And we know that in all things God works for the good of those who love him, who have been called according to his purpose.
+        </p>
       </div>
     </div>
+  )
+}
+
+function ProgramMonitor({ elapsed }: { elapsed: number }) {
+  return (
+    <div className="rounded-xl overflow-hidden border border-red-500/40 bg-black flex flex-col">
+      <div className="flex items-center justify-between px-3 h-8 bg-[#0c0c15] border-b border-white/[0.05]">
+        <span className="flex items-center gap-2 text-[12px] font-bold">
+          <span className="live-dot w-2 h-2 rounded-full bg-red-500" />
+          <span className="text-red-400">PROGRAM</span>
+          <span className="text-white/45 font-medium">(LIVE)</span>
+        </span>
+        <span className="text-[11px] text-white/40 font-mono">1080p60</span>
+      </div>
+      <Feed gradient="from-purple-950 via-indigo-900 to-fuchsia-950" className="aspect-video">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full bg-white/10 blur-2xl" />
+        <VerseLowerThird />
+      </Feed>
+      <div className="flex items-center gap-4 px-3 h-9 bg-[#0c0c15] text-[11px]">
+        <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-600 text-white font-bold"><Circle size={7} className="fill-white" /> LIVE</span>
+        <span className="flex items-center gap-1 text-white/65"><Eye size={12} /> 12,452</span>
+        <span className="flex items-center gap-1 text-white/65"><ThumbsUp size={12} /> 3,128</span>
+        <span className="flex items-center gap-1 text-white/65 ml-auto font-mono"><Clock size={12} /> {fmtClock(elapsed)}</span>
+      </div>
+    </div>
+  )
+}
+
+const TRANSITIONS = ['CUT', 'FADE', 'MOVE', 'WIPE'] as const
+
+function PreviewMonitor() {
+  const [trans, setTrans] = useState<string>('FADE')
+  return (
+    <div className="rounded-xl overflow-hidden border border-white/10 bg-black flex flex-col">
+      <div className="flex items-center justify-between px-3 h-8 bg-[#0c0c15] border-b border-white/[0.05]">
+        <span className="text-[12px] font-bold text-white/70">PREVIEW</span>
+        <span className="text-[11px] text-white/40 font-mono">1080p60</span>
+      </div>
+      <Feed gradient="from-blue-950 via-cyan-900 to-slate-950" className="aspect-video flex items-center justify-center">
+        <button className="relative z-10 w-14 h-14 rounded-full bg-white/15 backdrop-blur border border-white/25 flex items-center justify-center hover:bg-white/25 transition-colors">
+          <Play size={22} className="text-white fill-white ml-0.5" />
+        </button>
+      </Feed>
+      <div className="px-3 py-2.5 bg-[#0c0c15] space-y-2.5">
+        <div className="grid grid-cols-4 gap-1.5">
+          {TRANSITIONS.map(t => (
+            <button
+              key={t}
+              onClick={() => setTrans(t)}
+              className={cn(
+                'py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-colors',
+                trans === t ? 'bg-purple-600 text-white' : 'bg-white/[0.05] text-white/50 hover:bg-white/10',
+              )}
+            >{t}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-white/40 uppercase tracking-wider">Next</span>
+          <div className="flex-1 h-1 rounded-full bg-white/10 relative">
+            <div className="absolute left-0 top-0 h-full w-3/4 rounded-full bg-purple-500" />
+            <div className="absolute left-3/4 -top-1 w-3 h-3 rounded-full bg-purple-400 -translate-x-1/2" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-white/55 font-mono">⏱ 1.0s</span>
+          <button className="flex-1 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-[13px] font-bold tracking-wider hover:from-purple-500 hover:to-fuchsia-500 transition-colors">
+            TAKE
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Sources panel ──────────────────────────────────────────────────────────
+
+const SOURCE_TABS = ['VIDEO SOURCES', 'MEDIA SOURCES', 'NDI SOURCES', 'CAPTURE CARDS', 'VIRTUAL SOURCES']
+
+const SOURCES = [
+  { n: 1,  name: 'Camera 1',  sub: 'Sony A7S III',     live: true,  g: 0 },
+  { n: 2,  name: 'Camera 2',  sub: 'Blackmagic 4K',    live: true,  g: 1 },
+  { n: 3,  name: 'Camera 3',  sub: 'Canon XA60',       live: true,  g: 2 },
+  { n: 4,  name: 'NDI Stage Left', sub: 'NDI',         live: false, g: 4 },
+  { n: 5,  name: 'Zoom Guest', sub: 'Pastor David',    live: true,  g: 3 },
+  { n: 6,  name: 'Microsoft Teams', sub: 'Guest',      live: true,  g: 1 },
+  { n: 7,  name: 'Presentation', sub: 'Main Screen',   live: false, g: 5 },
+  { n: 8,  name: 'Media Player', sub: 'Worship Motion', live: true, g: 0 },
+  { n: 9,  name: 'Lower Third', sub: 'Announcements',  live: false, g: 2 },
+  { n: 10, name: 'Bible Verses', sub: 'ESV',           live: false, g: 4 },
+  { n: 11, name: 'YouTube Feed', sub: 'Live Chat',     live: false, g: 3 },
+  { n: 12, name: 'Image', sub: 'Church Logo',          live: false, g: 5, special: 'logo' },
+  { n: 13, name: 'Countdown', sub: '05',               live: false, g: 1, special: 'timer' },
+  { n: 14, name: 'Screen Capture', sub: 'Stage Display', live: true, g: 0 },
+]
+
+function SourcesPanel() {
+  const [tab, setTab] = useState(0)
+  return (
+    <Panel className="bg-[#0c0c15]">
+      <div className="flex items-center gap-1 px-3 h-10 border-b border-white/[0.05] overflow-x-auto">
+        {SOURCE_TABS.map((t, i) => (
+          <button
+            key={t}
+            onClick={() => setTab(i)}
+            className={cn(
+              'px-2.5 py-1 rounded-md text-[10.5px] font-semibold tracking-wide whitespace-nowrap transition-colors',
+              tab === i ? 'text-purple-300 bg-purple-600/15' : 'text-white/40 hover:text-white/70',
+            )}
+          >{t}</button>
+        ))}
+        <div className="ml-auto flex items-center gap-2">
+          <button className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-[11px] font-medium text-white/70">
+            <Plus size={12} /> Add Source
+          </button>
+          <button className="w-7 h-7 rounded-md bg-white/[0.04] flex items-center justify-center text-white/40 hover:text-white/70"><List size={13} /></button>
+          <button className="w-7 h-7 rounded-md bg-purple-600/20 flex items-center justify-center text-purple-300"><LayoutGrid size={13} /></button>
+        </div>
+      </div>
+      <div className="p-2.5 grid grid-cols-7 gap-2">
+        {SOURCES.map(s => (
+          <div key={s.n} className="rounded-lg overflow-hidden border border-white/[0.07] bg-black/40 group cursor-pointer hover:border-purple-500/40 transition-colors">
+            <Feed gradient={ACCENT_GRADIENTS[s.g]} className="aspect-video">
+              {s.live && (
+                <span className="absolute top-1 right-1 px-1 py-px rounded bg-red-600 text-[7px] font-bold text-white">LIVE</span>
+              )}
+              {s.special === 'logo' && <div className="absolute inset-0 flex items-center justify-center"><div className="w-7 h-7 rounded-md bg-cyan-400/80" /></div>}
+              {s.special === 'timer' && <div className="absolute inset-0 flex items-center justify-center font-mono text-sm font-bold text-white/90">05:00</div>}
+            </Feed>
+            <div className="px-1.5 py-1 bg-[#0a0a12]">
+              <div className="text-[9.5px] font-medium text-white/75 truncate">{s.n} {s.name}</div>
+              <div className="text-[8.5px] text-white/35 truncate">{s.sub}</div>
+            </div>
+          </div>
+        ))}
+        <button className="rounded-lg border border-dashed border-white/15 bg-white/[0.02] hover:bg-white/[0.04] flex flex-col items-center justify-center aspect-video text-white/40 hover:text-white/70 transition-colors">
+          <Plus size={18} />
+          <span className="text-[9px] mt-1 font-medium">Add Source</span>
+        </button>
+      </div>
+    </Panel>
+  )
+}
+
+// ── AI Assistant panel ─────────────────────────────────────────────────────
+
+function AiAssistant() {
+  const actions = [
+    { label: 'Display on Screen', primary: true,  icon: MonitorSmartphone },
+    { label: 'Add as Lower Third', icon: FileText },
+    { label: 'Add to Notes',       icon: FileText },
+    { label: 'Generate Social Clip', icon: Scissors },
+    { label: 'AI Sermon Notes',    icon: Brain },
+  ]
+  return (
+    <Panel className="h-full">
+      <div className="flex items-center gap-2 px-3 h-9 border-b border-white/[0.05]">
+        <Brain size={15} className="text-purple-400" />
+        <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">AI Assistant</span>
+      </div>
+      <div className="p-3 space-y-3 overflow-y-auto">
+        <div className="rounded-lg bg-black/30 border border-white/[0.05] p-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-white/50 mb-2">
+            <Mic size={11} className="text-purple-400" /> Listening...
+          </div>
+          <div className="flex items-end gap-0.5 h-8">
+            {Array.from({ length: 40 }).map((_, i) => (
+              <span key={i} className="flex-1 rounded-full bg-gradient-to-t from-purple-600 to-fuchsia-400"
+                style={{ height: `${20 + Math.abs(Math.sin(i * 0.9)) * 80}%`, opacity: 0.5 + Math.abs(Math.sin(i)) * 0.5 }} />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
+          <Sparkles size={12} /> Scripture Detected
+        </div>
+
+        <div>
+          <div className="text-lg font-bold text-white">Romans <span className="text-purple-300">8:28</span></div>
+          <p className="text-[11px] text-white/55 leading-relaxed mt-1">
+            And we know that in all things God works for the good of those who love him, who have been called according to his purpose.
+          </p>
+        </div>
+
+        <div className="space-y-1.5 pt-1">
+          {actions.map(({ label, primary, icon: Icon }) => (
+            <button
+              key={label}
+              className={cn(
+                'w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors',
+                primary
+                  ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500'
+                  : 'bg-white/[0.05] text-white/65 hover:bg-white/[0.09]',
+              )}
+            >
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Stage display panel ────────────────────────────────────────────────────
+
+const STAGE_TABS = ['NEXT', 'NOTES', 'ANNOUNCEMENTS', 'TIMER']
+
+function StagePanel() {
+  const [tab, setTab] = useState(0)
+  return (
+    <Panel className="h-full">
+      <div className="flex items-center gap-2 px-3 h-9 border-b border-white/[0.05]">
+        <MonitorSmartphone size={15} className="text-cyan-400" />
+        <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Stage Display</span>
+        <span className="text-[10px] text-white/35">(Live Feed)</span>
+      </div>
+      <div className="p-3 space-y-3">
+        <Feed gradient="from-orange-800 via-red-900 to-amber-950" className="rounded-lg aspect-video p-4 flex flex-col justify-center">
+          <div className="relative z-10">
+            <div className="text-2xl font-bold text-white drop-shadow">Romans 8:28</div>
+            <p className="text-[12px] text-white/85 leading-snug mt-1.5 drop-shadow">
+              And we know that in all things God works for the good of those who love him, who have been called according to his purpose.
+            </p>
+          </div>
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-40 text-5xl">✝</div>
+        </Feed>
+
+        <div className="flex items-center gap-1 border-b border-white/[0.06]">
+          {STAGE_TABS.map((t, i) => (
+            <button
+              key={t}
+              onClick={() => setTab(i)}
+              className={cn(
+                'px-2 py-1.5 text-[10px] font-semibold tracking-wide transition-colors border-b-2 -mb-px',
+                tab === i ? 'text-purple-300 border-purple-400' : 'text-white/40 border-transparent hover:text-white/70',
+              )}
+            >{t}</button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3">
+            <div className="text-sm font-bold text-white mb-1">Romans 8:29</div>
+            <p className="text-[10px] text-white/50 leading-relaxed">
+              For those God foreknew he also predestined to be conformed to the image of his Son...
+            </p>
+            <div className="mt-2 text-2xl opacity-30 text-orange-300">📖</div>
+          </div>
+          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 flex flex-col items-center justify-center">
+            <div className="text-3xl font-bold font-mono text-white tabular-nums">05:00</div>
+            <div className="text-[10px] text-white/40 mt-1">Sermon Timer</div>
+            <div className="flex items-center gap-2 mt-3">
+              <button className="w-8 h-8 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 flex items-center justify-center"><Play size={13} className="fill-white text-white ml-0.5" /></button>
+              <button className="w-8 h-8 rounded-lg bg-white/[0.08] hover:bg-white/15 flex items-center justify-center"><RotateCw size={13} className="text-white/70" /></button>
+              <button className="w-8 h-8 rounded-lg bg-white/[0.08] hover:bg-white/15 flex items-center justify-center"><Power size={13} className="text-white/70" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Bottom deck ────────────────────────────────────────────────────────────
+
+function BottomDeck() {
+  return (
+    <div className="grid grid-cols-12 gap-3">
+      <div className="col-span-5"><AudioMixer /></div>
+      <div className="col-span-3"><StreamingPanel /></div>
+      <div className="col-span-4"><MultiView /></div>
+      <div className="col-span-5"><LiveChat /></div>
+      <div className="col-span-4"><Polling /></div>
+      <div className="col-span-3"><Leaderboard /></div>
+    </div>
+  )
+}
+
+// ── Audio mixer ────────────────────────────────────────────────────────────
+
+const CHANNELS = [
+  { name: 'Mic 1', sub: 'Pastor',      db: '-3.2', level: 0.7 },
+  { name: 'Mic 2', sub: 'Worship Ldr', db: '-4.5', level: 0.6 },
+  { name: 'Mic 3', sub: 'Guest',       db: '-6.0', level: 0.45 },
+  { name: 'Music', sub: 'Playback',    db: '-2.0', level: 0.8 },
+  { name: 'SFX',   sub: 'Ambience',    db: '-8.3', level: 0.3 },
+  { name: 'NDI',   sub: 'Audio 1',     db: '-5.1', level: 0.5 },
+  { name: 'Zoom',  sub: 'Guest',       db: '-6.2', level: 0.4 },
+  { name: 'Teams', sub: 'Guest',       db: '-6.4', level: 0.42 },
+  { name: 'Master', sub: 'Output',     db: '-1.8', level: 0.85, master: true },
+]
+
+function AudioMixer() {
+  return (
+    <Panel title="Audio Mixer" className="h-[230px]">
+      <div className="flex gap-1.5 p-3 h-full overflow-x-auto">
+        {CHANNELS.map(ch => (
+          <div key={ch.name} className={cn('flex flex-col items-center gap-1.5 px-1.5 py-1 rounded-lg shrink-0 w-[58px]',
+            ch.master ? 'bg-purple-600/10 border border-purple-500/25' : 'bg-white/[0.02]')}>
+            <div className="text-center leading-tight">
+              <div className="text-[10px] font-semibold text-white/80 truncate w-full">{ch.name}</div>
+              <div className="text-[8px] text-white/35 truncate w-full">{ch.sub}</div>
+            </div>
+            <div className="relative w-7 h-7 rounded-full bg-[#15151f] border border-white/10">
+              <div className="absolute left-1/2 top-1 w-0.5 h-2.5 bg-purple-400 origin-bottom rounded-full" style={{ transform: `translateX(-50%) rotate(${ch.level * 270 - 135}deg)` }} />
+            </div>
+            <div className="flex items-end gap-1 h-[90px] mt-1">
+              <div className="relative w-1.5 h-full bg-white/[0.06] rounded-full">
+                <div className="absolute left-1/2 -translate-x-1/2 w-3 h-3 rounded-sm bg-white/80 border border-white/30" style={{ bottom: `${ch.level * 100}%` }} />
+              </div>
+              <div className="w-2 h-full rounded-sm bg-black/40 overflow-hidden flex flex-col-reverse">
+                <div className="w-full bg-gradient-to-t from-emerald-500 via-yellow-400 to-red-500" style={{ height: `${ch.level * 100}%` }} />
+              </div>
+            </div>
+            <div className="text-[8px] font-mono text-white/45">{ch.db}</div>
+            <div className="flex gap-1">
+              <button className="w-4 h-4 rounded-[3px] bg-white/[0.06] text-[7px] font-bold text-white/40 hover:bg-white/15">M</button>
+              <button className="w-4 h-4 rounded-[3px] bg-white/[0.06] text-[7px] font-bold text-white/40 hover:bg-white/15">S</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
+// ── Streaming & recording ──────────────────────────────────────────────────
+
+const STREAMS = [
+  { name: 'YouTube Live',    color: 'bg-red-600' },
+  { name: 'Facebook Live',   color: 'bg-blue-600' },
+  { name: 'Zoom Webinar',    color: 'bg-sky-500' },
+  { name: 'Microsoft Teams', color: 'bg-indigo-600' },
+  { name: 'Custom RTMP',     color: 'bg-purple-600' },
+]
+
+function StreamingPanel() {
+  return (
+    <Panel
+      title="Streaming & Recording"
+      right={<span className="flex items-center gap-2 text-[10px]"><span className="flex items-center gap-1 text-red-400 font-bold"><Circle size={6} className="fill-red-500 text-red-500" /> REC</span><Link2 size={12} className="text-white/30" /></span>}
+      className="h-[230px]"
+    >
+      <div className="flex gap-3 p-3 h-full">
+        <div className="flex-1 space-y-1.5">
+          {STREAMS.map(s => (
+            <div key={s.name} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+              <span className={cn('w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white', s.color)}>{s.name.charAt(0)}</span>
+              <span className="text-[11px] text-white/70 flex-1 truncate">{s.name}</span>
+              <span className="text-[9px] text-white/35 font-mono">1080p60</span>
+            </div>
+          ))}
+        </div>
+        <div className="w-[110px] rounded-lg bg-red-950/20 border border-red-500/20 p-2.5 flex flex-col items-center">
+          <span className="flex items-center gap-1 text-[10px] font-bold text-red-400"><Circle size={6} className="fill-red-500 text-red-500 live-dot" /> LIVE</span>
+          <div className="text-[10px] text-white/50 mt-2">Recording</div>
+          <div className="text-[13px] font-mono font-bold text-white tabular-nums">00:28:56</div>
+          <div className="flex gap-1.5 mt-2.5">
+            <button className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center"><Circle size={12} className="fill-white text-white" /></button>
+            <button className="w-8 h-8 rounded-full bg-white/[0.08] flex items-center justify-center"><Pause size={13} className="text-white/70" /></button>
+          </div>
+          <div className="text-[9px] text-white/40 mt-2.5">File Size</div>
+          <div className="text-[11px] font-mono text-white/70">2.45 GB</div>
+          <div className="w-full h-1 rounded-full bg-white/10 mt-1.5 overflow-hidden">
+            <div className="h-full w-2/3 bg-emerald-500" />
+          </div>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Multi-view ─────────────────────────────────────────────────────────────
+
+const MV = [
+  { n: 1, name: 'Cam 1', g: 0 }, { n: 2, name: 'Cam 2', g: 1 },
+  { n: 3, name: 'Cam 3', g: 2 }, { n: 4, name: 'NDI Left', g: 4, ring: 'ring-emerald-400' },
+  { n: 5, name: 'Zoom Guest', g: 3 }, { n: 6, name: 'Slides', g: 5 },
+  { n: 7, name: 'Media', g: 0 }, { n: 8, name: 'Preview', g: 1, ring: 'ring-cyan-400' },
+]
+
+function MultiView() {
+  return (
+    <Panel title="Multi-View" right={<span className="text-[10px] text-white/35">8 Views</span>} className="h-[230px]">
+      <div className="grid grid-cols-4 grid-rows-2 gap-1.5 p-2.5 h-full">
+        {MV.map(m => (
+          <div key={m.n} className={cn('relative rounded-md overflow-hidden border border-white/10', m.ring && `ring-1 ${m.ring}`)}>
+            <Feed gradient={ACCENT_GRADIENTS[m.g]} className="w-full h-full">
+              <span className="absolute bottom-0.5 left-1 text-[8px] font-medium text-white/80 drop-shadow">{m.n} {m.name}</span>
+            </Feed>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
+// ── Live chat ──────────────────────────────────────────────────────────────
+
+const CHAT = [
+  { name: 'Sarah J.',   msg: 'This is powerful!! 🙌' },
+  { name: 'Michael T.', msg: 'Glory to God! 🙏' },
+  { name: 'James K.',   msg: 'Amen! 🙏' },
+  { name: 'Grace A.',   msg: 'So blessed today 💜' },
+  { name: 'David P.',   msg: 'Hallelujah! 🙌' },
+]
+
+function LiveChat() {
+  return (
+    <Panel
+      title="Live Chat"
+      right={<span className="flex items-center gap-1 text-[10px] text-emerald-400"><Users size={11} /> 428</span>}
+      className="h-[230px]"
+    >
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {CHAT.map((c, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-orange-500 flex items-center justify-center text-[9px] font-bold shrink-0">{c.name.charAt(0)}</div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-white/75">{c.name}</div>
+                <div className="text-[11px] text-white/50">{c.msg}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="p-2.5 border-t border-white/[0.05] flex items-center gap-2">
+          <input placeholder="Type a message..." className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-lg px-3 py-1.5 text-[11px] text-white/80 placeholder:text-white/25 outline-none focus:border-purple-500/40" />
+          <button className="w-8 h-8 rounded-lg bg-purple-600 hover:bg-purple-500 flex items-center justify-center"><Send size={13} className="text-white" /></button>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Polling ────────────────────────────────────────────────────────────────
+
+const POLL = [
+  { label: 'Facebook',       pct: 42, color: 'bg-blue-500' },
+  { label: 'Church Website', pct: 28, color: 'bg-emerald-500' },
+  { label: 'Friend',         pct: 18, color: 'bg-purple-500' },
+  { label: 'YouTube',        pct: 8,  color: 'bg-red-500' },
+  { label: 'Other',          pct: 4,  color: 'bg-orange-500' },
+]
+
+function Polling() {
+  return (
+    <Panel title="Polling" right={<button className="text-white/30 hover:text-white/60 text-[14px] leading-none">✕</button>} className="h-[230px]">
+      <div className="p-3 flex flex-col h-full">
+        <div className="text-[11px] text-white/55 mb-2.5">How did you hear about this event?</div>
+        <div className="space-y-2 flex-1">
+          {POLL.map(p => (
+            <div key={p.label}>
+              <div className="flex items-center justify-between text-[10px] mb-0.5">
+                <span className="text-white/60">{p.label}</span>
+                <span className="text-white/45 font-mono">{p.pct}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                <div className={cn('h-full rounded-full', p.color)} style={{ width: `${p.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between text-[10px] pt-2 border-t border-white/[0.05] mt-2">
+          <span className="text-white/40">Total Votes: 1,245</span>
+          <span className="flex items-center gap-1 text-emerald-400"><Circle size={5} className="fill-emerald-400 text-emerald-400" /> Live</span>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Leaderboard ────────────────────────────────────────────────────────────
+
+const LEADERS = [
+  { rank: 1, name: 'David K.',   pts: 950 },
+  { rank: 2, name: 'Grace A.',   pts: 870 },
+  { rank: 3, name: 'Michael T.', pts: 760 },
+  { rank: 4, name: 'Sarah J.',   pts: 640 },
+  { rank: 5, name: 'James K.',   pts: 540 },
+]
+const MEDALS = ['bg-yellow-500', 'bg-slate-300', 'bg-amber-700']
+
+function Leaderboard() {
+  return (
+    <Panel title="Quiz Leaderboard" right={<button className="text-white/30 hover:text-white/60 text-[14px] leading-none">✕</button>} className="h-[230px]">
+      <div className="p-3 flex flex-col h-full">
+        <div className="space-y-1.5 flex-1">
+          {LEADERS.map(l => (
+            <div key={l.rank} className={cn('flex items-center gap-2.5 px-2 py-1.5 rounded-lg',
+              l.rank <= 3 ? 'bg-white/[0.04]' : 'bg-transparent')}>
+              <span className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold',
+                l.rank <= 3 ? `${MEDALS[l.rank - 1]} text-black` : 'text-white/40')}>{l.rank}</span>
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-orange-500 flex items-center justify-center text-[9px] font-bold">{l.name.charAt(0)}</div>
+              <span className="text-[12px] text-white/75 flex-1 truncate">{l.name}</span>
+              <span className="text-[11px] font-bold text-purple-300 font-mono">{l.pts} pts</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 text-[10px] text-white/40 pt-2 border-t border-white/[0.05] mt-2">
+          <Plus size={11} /> Participants: 1,204
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+// ── Bottom status bar ──────────────────────────────────────────────────────
+
+function BottomBar() {
+  return (
+    <footer className="h-7 shrink-0 flex items-center justify-between px-4 bg-[#0a0a12] border-t border-white/[0.06] text-[10.5px] text-white/45">
+      <div className="flex items-center gap-4">
+        <span className="flex items-center gap-1.5 font-semibold text-white/65"><Crown size={11} className="text-purple-400" /> GloryCast OS v1.0.0</span>
+        <span className="flex items-center gap-1 text-emerald-400"><Circle size={5} className="fill-emerald-400 text-emerald-400" /> Online</span>
+      </div>
+      <div className="flex items-center gap-5">
+        <span>Project: <b className="text-white/65 font-medium">Sunday Service</b></span>
+        <span>Resolution: <b className="text-white/65 font-medium">1080p60</b></span>
+        <span>FPS: <b className="text-white/65 font-medium">60</b></span>
+        <span>CPU: <b className="text-white/65 font-medium">23%</b></span>
+        <span>GPU: <b className="text-white/65 font-medium">35%</b></span>
+        <span>Memory: <b className="text-white/65 font-medium">6.2 GB / 16 GB</b></span>
+      </div>
+      <span className="flex items-center gap-1.5">Auto Save: <b className="text-emerald-400">Enabled</b> <Circle size={5} className="fill-emerald-400 text-emerald-400" /></span>
+    </footer>
   )
 }
