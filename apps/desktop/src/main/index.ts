@@ -5,6 +5,14 @@ import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
 import { AppStore } from './store'
 
+// The Vite dev server legitimately needs 'unsafe-eval', which always triggers
+// Electron's dev-only "Insecure Content-Security-Policy" console warning. A
+// strict CSP is enforced for the packaged build (see bootstrap), so silence the
+// noisy dev warning here. (This flag has no effect on packaged apps.)
+if (process.env.NODE_ENV === 'development') {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
+
 // __dirname is dist/main → DIST is the dist/ root (holds renderer/index.html).
 process.env.DIST = join(__dirname, '..')
 process.env.VITE_PUBLIC = app.isPackaged
@@ -124,6 +132,24 @@ async function bootstrap() {
       callback(sources.length ? { video: sources[0] } : {})
     }).catch(() => callback({}))
   })
+
+  // Enforce a strict Content-Security-Policy for the packaged app (file://).
+  // The built bundle needs no eval, so this closes the security gap without
+  // breaking the dev server (which is left untouched and requires unsafe-eval).
+  if (!DEV_SERVER_URL) {
+    const csp = [
+      "default-src 'self'",
+      "img-src 'self' data: blob:",
+      "media-src 'self' blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self'",
+      "font-src 'self' data:",
+      "connect-src 'self' http://localhost:3001 ws://localhost:3001 wss: https:",
+    ].join('; ')
+    session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+      cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
+    })
+  }
 
   createIPCHandlers(store, windowManager)
   createMainWindow()

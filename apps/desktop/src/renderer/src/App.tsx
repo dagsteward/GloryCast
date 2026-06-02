@@ -14,7 +14,7 @@ import { AnalyticsPage } from './pages/Analytics'
 
 export function App() {
   return (
-    <HashRouter>
+    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AnimatePresence mode="wait">
         <Routes>
           {/* Stage display runs fullscreen on second monitor */}
