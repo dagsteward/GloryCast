@@ -11,7 +11,34 @@ import {
 import { useAiCopilot } from '../hooks/useAiCopilot'
 import { useMediaEngine, getStream, type SourceType } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
+import { loadTranslation, getVerseText, searchBibleMerged, BUNDLED_TRANSLATIONS } from '../lib/bibleData'
 import { cn } from '../lib/utils'
+
+// Canonical 66-book names for reference lookup (matches bundled Bible keys).
+const BIBLE_BOOKS = [
+  'Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth',
+  '1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra',
+  'Nehemiah','Esther','Job','Psalms','Proverbs','Ecclesiastes','Song of Solomon',
+  'Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah',
+  'Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi',
+  'Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians',
+  'Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians',
+  '1 Timothy','2 Timothy','Titus','Philemon','Hebrews','James','1 Peter','2 Peter',
+  '1 John','2 John','3 John','Jude','Revelation',
+]
+
+/** Parse "John 3:16" / "Psalm 23:1" → {book,chapter,verse}, or null. */
+function parseReference(q: string): { book: string; chapter: number; verse: number } | null {
+  const m = q.match(/^\s*([1-3]?\s?[A-Za-z][A-Za-z ]*?)\s+(\d{1,3}):(\d{1,3})\s*$/)
+  if (!m) return null
+  const raw = m[1].replace(/\s+/g, ' ').trim().toLowerCase()
+  const book =
+    BIBLE_BOOKS.find(b => b.toLowerCase() === raw) ||
+    BIBLE_BOOKS.find(b => b.toLowerCase().startsWith(raw)) ||
+    (raw === 'psalm' ? 'Psalms' : null)
+  if (!book) return null
+  return { book, chapter: +m[2], verse: +m[3] }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Production — full-screen cinematic broadcast control room (GloryCast OS)
@@ -548,70 +575,116 @@ function AiAssistant({ onLive, onStage, liveRef, stageRef }: {
   const setAiListening = useServiceStore(s => s.setAiListening)
   const scriptures = detections.filter(d => d.kind === 'scripture')
 
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Graphic[]>([])
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    Promise.all(BUNDLED_TRANSLATIONS.map(t => loadTranslation(t).catch(() => null))).then(() => setReady(true))
+  }, [])
+
+  const runSearch = () => {
+    const q = query.trim()
+    if (!q) { setResults([]); return }
+    const out: Graphic[] = []
+    const ref = parseReference(q)
+    if (ref) {
+      for (const tx of BUNDLED_TRANSLATIONS) {
+        const t = getVerseText(tx, ref.book, ref.chapter, ref.verse)
+        if (t) { out.push({ ref: `${ref.book} ${ref.chapter}:${ref.verse}`, text: t, translation: tx }); break }
+      }
+    }
+    if (out.length === 0) {
+      for (const h of searchBibleMerged([...BUNDLED_TRANSLATIONS], q, { limit: 12 })) {
+        out.push({ ref: `${h.book} ${h.chapter}:${h.verse}`, text: h.text, translation: h.tx })
+      }
+    }
+    setResults(out)
+  }
+
+  const Card = ({ g, conf }: { g: Graphic; conf?: number }) => {
+    const isLive = liveRef === g.ref, isStage = stageRef === g.ref
+    return (
+      <div className={cn('rounded-lg border p-2.5', isLive ? 'border-red-500/40 bg-red-600/[0.08]' : 'border-purple-500/20 bg-purple-600/[0.07]')}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <BookOpen size={11} className="text-purple-300 shrink-0" />
+          <span className="text-[12px] font-bold text-purple-200 truncate">{g.ref}</span>
+          {g.translation && <span className="text-[8.5px] text-white/30">{g.translation}</span>}
+          {conf != null && <span className="ml-auto text-[8px] font-mono text-emerald-400/70">{Math.round(conf * 100)}%</span>}
+        </div>
+        <p className="text-[10.5px] text-white/55 leading-snug line-clamp-2 mb-2">{g.text}</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button onClick={() => onLive(g)}
+            className={cn('flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-semibold transition-colors',
+              isLive ? 'bg-red-600 text-white' : 'bg-red-600/20 text-red-300 hover:bg-red-600/40')}>
+            <Circle size={7} className={isLive ? 'fill-white' : 'fill-red-400'} /> {isLive ? 'On Air' : 'Go Live'}
+          </button>
+          <button onClick={() => onStage(g)}
+            className={cn('flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-semibold transition-colors',
+              isStage ? 'bg-cyan-600 text-white' : 'bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/40')}>
+            <MonitorSmartphone size={10} /> {isStage ? 'In-House' : 'Stage'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Panel className="h-full">
       <div className="flex items-center gap-2 px-3 h-9 border-b border-white/[0.05]">
         <Brain size={15} className="text-purple-400" />
-        <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Bible AI</span>
+        <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Bible</span>
         <button
           onClick={() => setAiListening(!aiListening)}
-          className={cn('ml-auto text-[9px] px-1.5 py-0.5 rounded font-semibold', aiListening ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] text-white/50 hover:text-white/80')}
-        >{aiListening ? 'Listening' : 'Paused'}</button>
+          title="Live voice detection (best-effort; needs internet & a speech engine)"
+          className={cn('ml-auto flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold', aiListening ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] text-white/50 hover:text-white/80')}
+        ><Mic size={9} /> {aiListening ? 'Voice On' : 'Voice'}</button>
       </div>
       <div className="flex flex-col h-[calc(100%-2.25rem)]">
+        {/* Manual lookup — always works offline from bundled KJV + WEB */}
         <div className="p-3 pb-2 shrink-0">
-          <div className="rounded-lg bg-black/30 border border-white/[0.05] p-2.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-white/50 mb-2">
-              <Mic size={11} className={aiListening ? 'text-purple-400' : 'text-white/30'} /> {aiListening ? 'Listening for scripture…' : 'Paused'}
-            </div>
-            <div className="flex items-end gap-0.5 h-7">
-              {Array.from({ length: 36 }).map((_, i) => (
-                <span key={i} className="flex-1 rounded-full bg-gradient-to-t from-purple-600 to-fuchsia-400"
-                  style={{ height: `${aiListening ? 15 + Math.abs(Math.sin(i * 0.9)) * 85 : 6}%`, opacity: aiListening ? 0.5 + Math.abs(Math.sin(i)) * 0.5 : 0.2 }} />
-              ))}
-            </div>
-            {transcript && <p className="text-[9.5px] text-white/35 italic mt-1.5 line-clamp-2">…{transcript.slice(-120)}</p>}
+          <div className="flex items-center gap-1.5">
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && runSearch()}
+              placeholder={ready ? 'Reference or quote… e.g. John 3:16' : 'Loading Bible…'}
+              disabled={!ready}
+              className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-[11px] text-white/85 placeholder:text-white/25 outline-none focus:border-purple-500/40"
+            />
+            <button onClick={runSearch} disabled={!ready} className="w-8 h-8 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 flex items-center justify-center shrink-0">
+              <BookOpen size={14} className="text-white" />
+            </button>
           </div>
+          {transcript && aiListening && <p className="text-[9px] text-white/30 italic mt-1.5 line-clamp-1">heard: …{transcript.slice(-90)}</p>}
         </div>
 
-        <div className="px-3 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-white/35 shrink-0">
-          <Sparkles size={11} className="text-emerald-400" /> Detected · push to output
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-2 space-y-2">
-          {scriptures.length === 0 ? (
-            <div className="text-center py-6 text-white/25">
-              <BookOpen size={22} className="mx-auto mb-2 opacity-30" />
-              <p className="text-[11px]">Speak or quote a verse</p>
-              <p className="text-[9.5px] text-white/15 mt-0.5">References & paraphrases detected live</p>
-            </div>
-          ) : scriptures.map(d => {
-            const g: Graphic = { ref: d.reference, text: d.text, translation: d.subtitle }
-            const isLive = liveRef === d.reference, isStage = stageRef === d.reference
-            return (
-              <div key={d.id} className="rounded-lg border border-purple-500/20 bg-purple-600/[0.07] p-2.5">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <BookOpen size={11} className="text-purple-300 shrink-0" />
-                  <span className="text-[12px] font-bold text-purple-200 truncate">{d.reference}</span>
-                  {d.subtitle && <span className="text-[8.5px] text-white/30">{d.subtitle}</span>}
-                  <span className="ml-auto text-[8px] font-mono text-emerald-400/70">{Math.round(d.confidence * 100)}%</span>
-                </div>
-                <p className="text-[10.5px] text-white/55 leading-snug line-clamp-2 mb-2">{d.text}</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    onClick={() => onLive(g)}
-                    className={cn('flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-semibold transition-colors',
-                      isLive ? 'bg-red-600 text-white' : 'bg-red-600/20 text-red-300 hover:bg-red-600/40')}
-                  ><Circle size={7} className={isLive ? 'fill-white' : 'fill-red-400'} /> {isLive ? 'On Air' : 'Go Live'}</button>
-                  <button
-                    onClick={() => onStage(g)}
-                    className={cn('flex items-center justify-center gap-1 py-1 rounded-md text-[10px] font-semibold transition-colors',
-                      isStage ? 'bg-cyan-600 text-white' : 'bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/40')}
-                  ><MonitorSmartphone size={10} /> {isStage ? 'In-House' : 'Stage'}</button>
-                </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 space-y-2">
+          {results.length > 0 && (
+            <>
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-white/35">
+                <span className="flex items-center gap-1"><BookOpen size={10} className="text-purple-300" /> Results</span>
+                <button onClick={() => { setResults([]); setQuery('') }} className="text-white/30 hover:text-white/60 normal-case">clear</button>
               </div>
-            )
-          })}
+              {results.map((g, i) => <Card key={`r${i}`} g={g} />)}
+            </>
+          )}
+
+          {scriptures.length > 0 && (
+            <>
+              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-white/35 pt-1">
+                <Sparkles size={10} className="text-emerald-400" /> Voice-detected
+              </div>
+              {scriptures.map(d => <Card key={d.id} g={{ ref: d.reference, text: d.text, translation: d.subtitle }} conf={d.confidence} />)}
+            </>
+          )}
+
+          {results.length === 0 && scriptures.length === 0 && (
+            <div className="text-center py-8 text-white/25">
+              <BookOpen size={24} className="mx-auto mb-2 opacity-30" />
+              <p className="text-[11px]">Search a verse to project</p>
+              <p className="text-[9.5px] text-white/15 mt-0.5">Type a reference or a remembered line</p>
+            </div>
+          )}
         </div>
       </div>
     </Panel>
@@ -701,14 +774,13 @@ function StagePanel({ graphic, clearGraphic }: { graphic: Graphic | null; clearG
 
 // ── Bottom deck ────────────────────────────────────────────────────────────
 
-// Polling + Quiz Leaderboard live on the Webinar page, not the broadcast desk.
+// Audio switcher + multi-view + streaming. (Chat/polls/quiz live on Webinar.)
 function BottomDeck({ streaming, setStreaming }: { streaming: boolean; setStreaming: (v: boolean) => void }) {
   return (
     <div className="grid grid-cols-12 gap-3">
       <div className="col-span-6"><AudioMixer /></div>
       <div className="col-span-3"><StreamingPanel streaming={streaming} setStreaming={setStreaming} /></div>
       <div className="col-span-3"><MultiView /></div>
-      <div className="col-span-12"><LiveChat /></div>
     </div>
   )
 }
@@ -876,59 +948,6 @@ function MultiView() {
             {s && <span className="absolute bottom-0.5 left-1 text-[8px] font-medium text-white/80 drop-shadow truncate max-w-[90%]">{i + 1} {s.label}</span>}
           </div>
         ))}
-      </div>
-    </Panel>
-  )
-}
-
-// ── Live chat (functional input) ───────────────────────────────────────────
-
-function LiveChat() {
-  const [chat, setChat] = useState<{ name: string; msg: string }[]>([])
-  const [draft, setDraft] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
-  const send = () => {
-    const t = draft.trim()
-    if (!t) return
-    setChat(c => [...c, { name: 'You', msg: t }])
-    setDraft('')
-    setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
-  }
-  return (
-    <Panel
-      title="Live Chat"
-      right={<span className="flex items-center gap-1 text-[10px] text-white/40"><Users size={11} /> {chat.length}</span>}
-      className="h-[230px]"
-    >
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {chat.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-white/25">
-              <MessageSquare size={22} className="mb-2 opacity-40" />
-              <p className="text-[11px]">No messages yet</p>
-              <p className="text-[9px] text-white/15 mt-0.5">Connect a platform to sync live chat</p>
-            </div>
-          ) : chat.map((c, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 bg-purple-600">{c.name.charAt(0)}</div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-white/75">{c.name}</div>
-                <div className="text-[11px] text-white/50">{c.msg}</div>
-              </div>
-            </div>
-          ))}
-          <div ref={endRef} />
-        </div>
-        <div className="p-2.5 border-t border-white/[0.05] flex items-center gap-2">
-          <input
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && send()}
-            placeholder="Type a message..."
-            className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-lg px-3 py-1.5 text-[11px] text-white/80 placeholder:text-white/25 outline-none focus:border-purple-500/40"
-          />
-          <button onClick={send} className="w-8 h-8 rounded-lg bg-purple-600 hover:bg-purple-500 flex items-center justify-center"><Send size={13} className="text-white" /></button>
-        </div>
       </div>
     </Panel>
   )
