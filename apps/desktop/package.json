@@ -2,6 +2,7 @@
   "name": "@glorycast/desktop",
   "version": "1.0.0",
   "description": "GloryCast AI Desktop Application",
+  "author": "GloryCast",
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
@@ -53,6 +54,7 @@
   "build": {
     "appId": "ai.glorycast.app",
     "productName": "GloryCast AI",
+    "electronVersion": "29.4.6",
     "directories": {
       "output": "release"
     },
