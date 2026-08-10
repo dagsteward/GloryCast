@@ -52,6 +52,12 @@ export interface ServiceSegment {
   id:    string
   label: string
   done:  boolean
+  /**
+   * Scheduled start, as displayed ("10:30 AM"). Optional because a segment list
+   * is useful as a plain running order too — the Minimal workspace's service
+   * plan shows times, the Cinematic segment strip does not.
+   */
+  time?: string
 }
 
 interface ServiceState {
@@ -121,12 +127,12 @@ interface ServiceState {
 const AUTO_PILOT_THRESHOLD = 0.88
 
 const DEFAULT_SEGMENTS: ServiceSegment[] = [
-  { id: 'seg-welcome',  label: 'Welcome & Announcements', done: false },
-  { id: 'seg-worship',  label: 'Worship Set',             done: false },
-  { id: 'seg-prayer',   label: 'Prayer',                  done: false },
-  { id: 'seg-sermon',   label: 'Sermon',                  done: false },
-  { id: 'seg-response', label: 'Response & Altar Call',   done: false },
-  { id: 'seg-close',    label: 'Closing',                 done: false },
+  { id: 'seg-welcome',  label: 'Welcome & Announcements', done: false, time: '10:00 AM' },
+  { id: 'seg-worship',  label: 'Worship Set',             done: false, time: '10:10 AM' },
+  { id: 'seg-prayer',   label: 'Prayer',                  done: false, time: '10:25 AM' },
+  { id: 'seg-sermon',   label: 'Sermon',                  done: false, time: '10:30 AM' },
+  { id: 'seg-response', label: 'Response & Altar Call',   done: false, time: '11:15 AM' },
+  { id: 'seg-close',    label: 'Closing',                 done: false, time: '11:40 AM' },
 ]
 
 const uid = (p: string) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`

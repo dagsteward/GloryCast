@@ -12,6 +12,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src/renderer/src'),
+      '@glorycast/media-engine': path.resolve(__dirname, '../../packages/media-engine/src/index.ts'),
     },
   },
   server: {

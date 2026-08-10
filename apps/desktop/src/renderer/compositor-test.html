@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>GloryCast — Compositor Bench</title>
+    <style>
+      body { margin: 0; background: #0a0a0c; color: #e7e7ea; font: 13px/1.5 Inter, system-ui, sans-serif; padding: 20px; }
+      h1 { font-size: 15px; letter-spacing: .04em; text-transform: uppercase; color: #8b8b96; margin: 0 0 16px; }
+      .row { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+      .mon { border: 1px solid #26262e; border-radius: 8px; overflow: hidden; }
+      .mon h2 { margin: 0; padding: 6px 10px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; background: #14141a; color: #8b8b96; }
+      .mon.pgm h2 { background: #7f1d1d; color: #fff; }
+      canvas { display: block; background: #000; }
+      #pgm { width: 640px; height: 360px; }
+      #pvw { width: 320px; height: 180px; }
+      .ctl { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+      button { background: #1c1c24; color: #e7e7ea; border: 1px solid #32323c; border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer; }
+      button:hover { background: #26262e; }
+      pre { background: #101016; border: 1px solid #26262e; border-radius: 8px; padding: 12px; margin-top: 16px; color: #9ca3af; }
+    </style>
+  </head>
+  <body>
+    <h1>Compositor Bench</h1>
+    <div class="row">
+      <div class="mon pgm"><h2>Program</h2><canvas id="pgm"></canvas></div>
+      <div class="mon"><h2>Preview</h2><canvas id="pvw"></canvas></div>
+    </div>
+    <div class="ctl" id="ctl"></div>
+    <pre id="stats">waiting…</pre>
+    <script type="module" src="/compositor-test.ts"></script>
+  </body>
+</html>

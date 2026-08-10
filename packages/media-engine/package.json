@@ -1,0 +1,16 @@
+{
+  "name": "@glorycast/media-engine",
+  "version": "1.0.0",
+  "description": "GloryCast AI — GPU compositor, layer stack, and transition engine for live program output",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

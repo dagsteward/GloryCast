@@ -9,6 +9,10 @@ import {
   Camera, Monitor, Palette, Timer as TimerIcon, X, Trash2,
 } from 'lucide-react'
 import { useAiCopilot } from '../hooks/useAiCopilot'
+import {
+  useCompositor, useProgramCanvas, usePreviewCanvas,
+  type CompositorController,
+} from '../hooks/useCompositor'
 import { useMediaEngine, getStream, type SourceType } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
 import { loadTranslation, getVerseText, searchBibleMerged, BUNDLED_TRANSLATIONS } from '../lib/bibleData'
@@ -118,167 +122,26 @@ export function ProductionPage() {
   const [stageGraphic, setStageGraphic] = useState<Graphic | null>(null)
   const [streaming, setStreaming] = useState(false)
 
+  // The GPU compositor produces the actual program frame. The live graphic is
+  // passed in so scripture is composited into the output rather than being a
+  // DOM overlay the stream would never see.
+  const compositor = useCompositor(liveGraphic)
+
   return (
-    <div className="w-full h-full flex flex-col bg-[#070709] text-white/90 overflow-hidden select-none">
-      <TopBar elapsed={elapsed} sourceCount={sources.length} streaming={streaming} />
-      <div className="flex-1 flex min-h-0">
-        <SceneRail />
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-            <TopDeck
-              elapsed={elapsed} streaming={streaming}
-              liveGraphic={liveGraphic} setLiveGraphic={setLiveGraphic}
-              stageGraphic={stageGraphic} setStageGraphic={setStageGraphic}
-            />
-            <BottomDeck streaming={streaming} setStreaming={setStreaming} />
-          </div>
-        </div>
-      </div>
-      <BottomBar sourceCount={sources.length} streaming={streaming} />
+    // Chrome (brand rail, top bar, status bar) now lives in MainLayout so every
+    // page shares it. This page renders only the control-room content.
+    <div className="w-full h-full overflow-y-auto p-3 space-y-3 text-white/90 select-none">
+      <TopDeck
+        elapsed={elapsed} streaming={streaming} compositor={compositor}
+        liveGraphic={liveGraphic} setLiveGraphic={setLiveGraphic}
+        stageGraphic={stageGraphic} setStageGraphic={setStageGraphic}
+      />
+      <BottomDeck streaming={streaming} setStreaming={setStreaming} />
     </div>
   )
 }
 
 export interface Graphic { ref: string; text: string; translation?: string }
-
-// ── Top status bar ─────────────────────────────────────────────────────────
-
-function TopBar({ elapsed, sourceCount, streaming }: { elapsed: number; sourceCount: number; streaming: boolean }) {
-  return (
-    <header className="h-14 shrink-0 flex items-center justify-between px-4 bg-gradient-to-b from-[#0c0c14] to-[#090910] border-b border-white/[0.06]">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-purple-900/40">
-          <Crown size={18} className="text-white" />
-        </div>
-        <div className="leading-none">
-          <div className="text-[15px] font-extrabold tracking-tight">GloryCast OS</div>
-          <div className="text-[9px] tracking-[0.25em] text-purple-300/60 font-semibold mt-0.5">CINEMATIC BROADCAST</div>
-        </div>
-        <button className="ml-2 w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/40">
-          <Menu size={17} />
-        </button>
-      </div>
-
-      <div className="flex items-center gap-5 text-[12px]">
-        {streaming ? (
-          <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30">
-            <span className="live-dot w-2 h-2 rounded-full bg-red-500" />
-            <span className="font-bold text-red-400">LIVE</span>
-            <span className="font-mono text-red-400/80 tabular-nums">{fmtClock(elapsed)}</span>
-          </span>
-        ) : (
-          <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-white/30" />
-            <span className="font-bold text-white/50">STANDBY</span>
-          </span>
-        )}
-        <span className="flex items-center gap-1.5 text-white/55"><Cpu size={13} className="text-cyan-400" /> Sources <b className="text-white/80 font-semibold">{sourceCount}</b></span>
-        <span className="flex items-center gap-1.5 text-white/55"><Film size={13} className="text-emerald-400" /> FPS <b className="text-white/80 font-semibold">60</b></span>
-        <span className="flex items-center gap-1.5 text-white/55"><Wifi size={13} className="text-emerald-400" /> Internet <b className="text-emerald-400 font-semibold">Excellent</b></span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <IconBtn icon={Bell} badge="12" />
-        <IconBtn icon={MessageSquare} />
-        <IconBtn icon={HelpCircle} />
-        <div className="flex items-center gap-2 pl-2 ml-1 border-l border-white/10">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-orange-500 flex items-center justify-center text-[11px] font-bold">DA</div>
-          <div className="leading-none">
-            <div className="text-[12px] font-semibold">Daniel Admin</div>
-            <div className="text-[9px] text-white/40 mt-0.5">Super Admin</div>
-          </div>
-          <ChevronDown size={14} className="text-white/40" />
-        </div>
-      </div>
-    </header>
-  )
-}
-
-function IconBtn({ icon: Icon, badge }: { icon: typeof Bell; badge?: string }) {
-  return (
-    <button className="relative w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/50">
-      <Icon size={17} />
-      {badge && (
-        <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">{badge}</span>
-      )}
-    </button>
-  )
-}
-
-// ── Left scene / nav rail ──────────────────────────────────────────────────
-
-const NAV = [
-  { icon: LayoutGrid,        label: 'Dashboard',        path: '/dashboard' },
-  { icon: Video,             label: 'Production',       active: true,  path: '/production' },
-  { icon: Film,              label: 'Media Library',    path: '/presentation' },
-  { icon: Music2,            label: 'Worship',          path: '/presentation' },
-  { icon: BookOpen,          label: 'Bible',            path: '/bible' },
-  { icon: Sparkles,          label: 'AI Studio',        path: '/ai-studio' },
-  { icon: Users,             label: 'Webinar & Guests', path: '/webinar' },
-  { icon: ImageIcon,         label: 'Graphics',         path: '/presentation' },
-  { icon: SlidersHorizontal, label: 'Audio Mixer',      path: '/production' },
-  { icon: Play,              label: 'Playback',         path: '/production' },
-  { icon: Radio,             label: 'Stream & Record',  path: '/production' },
-  { icon: MonitorSmartphone, label: 'Stage Display',    path: '/stage-display' },
-  { icon: Settings,          label: 'Settings',         path: '/settings' },
-]
-
-const SCENES = [
-  'Worship Intro', 'Praise & Worship', 'Scripture Reading', 'Sermon',
-  'Prayer', 'Offering', 'Announcements', 'Closing',
-]
-
-function SceneRail() {
-  const navigate = useNavigate()
-  const [active, setActive] = useState(0)
-  return (
-    <aside className="w-52 shrink-0 flex flex-col bg-[#0a0a12] border-r border-white/[0.06] overflow-y-auto">
-      <nav className="p-2 space-y-0.5">
-        {NAV.map(({ icon: Icon, label, active: on, path }) => (
-          <button
-            key={label}
-            onClick={() => navigate(path)}
-            className={cn(
-              'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12.5px] font-medium transition-colors',
-              on ? 'bg-gradient-to-r from-purple-600/40 to-purple-600/10 text-white border border-purple-500/30'
-                 : 'text-white/45 hover:text-white/80 hover:bg-white/[0.04] border border-transparent',
-            )}
-          >
-            <Icon size={15} className={on ? 'text-purple-300' : ''} />
-            <span className="flex-1 text-left">{label}</span>
-            {on && <ChevronRight size={13} className="text-purple-300/70" />}
-          </button>
-        ))}
-      </nav>
-
-      <div className="px-3 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold">Scenes</span>
-        <button className="w-5 h-5 rounded-md bg-white/[0.06] hover:bg-white/10 flex items-center justify-center text-white/50">
-          <Plus size={12} />
-        </button>
-      </div>
-      <div className="px-2 pb-3 space-y-0.5">
-        {SCENES.map((name, i) => (
-          <button
-            key={name}
-            onClick={() => setActive(i)}
-            className={cn(
-              'w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors',
-              active === i ? 'bg-purple-600/25 text-white border border-purple-500/30'
-                           : 'text-white/50 hover:bg-white/[0.04] border border-transparent',
-            )}
-          >
-            <span className={cn('w-4 text-center text-[11px] font-mono', active === i ? 'text-purple-300' : 'text-white/30')}>{i + 1}</span>
-            <span className="flex-1 text-left truncate">{name}</span>
-            {active === i
-              ? <Play size={11} className="text-purple-300 fill-purple-300" />
-              : <ChevronRight size={11} className="text-white/20" />}
-          </button>
-        ))}
-      </div>
-    </aside>
-  )
-}
 
 function Panel({ title, right, children, className }: {
   title?: string; right?: React.ReactNode; children: React.ReactNode; className?: string
@@ -298,9 +161,10 @@ function Panel({ title, right, children, className }: {
 
 // ── Top deck ───────────────────────────────────────────────────────────────
 
-function TopDeck({ elapsed, streaming, liveGraphic, setLiveGraphic, stageGraphic, setStageGraphic }: {
+function TopDeck({ elapsed, streaming, compositor, liveGraphic, setLiveGraphic, stageGraphic, setStageGraphic }: {
   elapsed: number
   streaming: boolean
+  compositor: CompositorController
   liveGraphic: Graphic | null
   setLiveGraphic: (v: Graphic | null) => void
   stageGraphic: Graphic | null
@@ -311,7 +175,7 @@ function TopDeck({ elapsed, streaming, liveGraphic, setLiveGraphic, stageGraphic
       <div className="col-span-7 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <ProgramMonitor elapsed={elapsed} streaming={streaming} graphic={liveGraphic} clearGraphic={() => setLiveGraphic(null)} />
-          <PreviewMonitor />
+          <PreviewMonitor compositor={compositor} />
         </div>
         <SourcesPanel />
       </div>
@@ -327,6 +191,10 @@ function ProgramMonitor({ elapsed, streaming, graphic, clearGraphic }: {
   const programId = useMediaEngine(s => s.programId)
   const sources   = useMediaEngine(s => s.sources)
   const prog = sources.find(s => s.id === programId)
+
+  const hostRef = useRef<HTMLDivElement>(null)
+  useProgramCanvas(hostRef)
+
   return (
     <div className={cn('rounded-xl overflow-hidden border bg-black flex flex-col', streaming ? 'border-red-500/40' : 'border-white/10')}>
       <div className="flex items-center justify-between px-3 h-8 bg-[#0c0c15] border-b border-white/[0.05]">
@@ -337,19 +205,26 @@ function ProgramMonitor({ elapsed, streaming, graphic, clearGraphic }: {
         </span>
         <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prog?.label ?? 'No Program'}</span>
       </div>
-      <div className="relative aspect-video">
-        <SourceVideo key={programId ?? 'none'} id={programId} type={prog?.type} label={prog?.label ?? 'No Program'} className="w-full h-full" />
-        {graphic && (
-          <div className="absolute bottom-0 left-0 right-0 p-5">
-            <div className="border-l-[3px] border-purple-400 pl-4 group">
-              <div className="text-3xl font-bold text-white drop-shadow-lg flex items-center gap-2">
-                {graphic.ref}
-                {graphic.translation && <span className="text-[11px] font-medium text-purple-200/70 self-end mb-1">{graphic.translation}</span>}
-                <button onClick={clearGraphic} title="Clear live graphic" className="opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} className="text-white/60" /></button>
-              </div>
-              <p className="text-[15px] text-white/90 leading-snug mt-1 max-w-[92%] drop-shadow">{graphic.text}</p>
-            </div>
+      {/* The composited program frame. This canvas IS the output — what the
+          congregation and the stream see — so any graphic must be a compositor
+          layer, never a DOM overlay sitting on top of it. */}
+      <div className="relative aspect-video bg-black group">
+        <div ref={hostRef} className="absolute inset-0" />
+
+        {!programId && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-[11px] text-white/30">No Program</span>
           </div>
+        )}
+
+        {graphic && (
+          <button
+            onClick={clearGraphic}
+            title="Clear live graphic"
+            className="absolute top-2 right-2 w-6 h-6 rounded-md bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <X size={13} className="text-white/80" />
+          </button>
         )}
       </div>
       <div className="flex items-center gap-4 px-3 h-9 bg-[#0c0c15] text-[11px]">
@@ -364,16 +239,40 @@ function ProgramMonitor({ elapsed, streaming, graphic, clearGraphic }: {
   )
 }
 
-const TRANSITIONS = ['CUT', 'FADE', 'MOVE', 'WIPE'] as const
+/** UI label → compositor transition. "MOVE" is a slide in broadcast parlance. */
+const TRANSITIONS = [
+  { label: 'CUT',  kind: 'cut'   as const },
+  { label: 'FADE', kind: 'fade'  as const },
+  { label: 'MOVE', kind: 'slide' as const },
+  { label: 'WIPE', kind: 'wipe'  as const },
+]
 
-function PreviewMonitor() {
+const DURATIONS = [0.5, 1.0, 1.5, 2.0]
+
+function PreviewMonitor({ compositor }: { compositor: CompositorController }) {
   const previewId = useMediaEngine(s => s.previewId)
   const sources   = useMediaEngine(s => s.sources)
-  const cutToProgram = useMediaEngine(s => s.cutToProgram)
   const prev = sources.find(s => s.id === previewId)
-  const [trans, setTrans] = useState<string>('FADE')
 
-  const take = () => { if (previewId) cutToProgram() }
+  const [trans, setTrans]       = useState<typeof TRANSITIONS[number]>(TRANSITIONS[1])
+  const [duration, setDuration] = useState(1.0)
+  const [busy, setBusy]         = useState(false)
+
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  usePreviewCanvas(canvasRef)
+
+  const take = () => {
+    if (!previewId || busy) return
+    if (trans.kind === 'cut') {
+      compositor.cut()
+      return
+    }
+    // Lock TAKE for the duration of the move so a second press can't fire
+    // mid-transition — a double-punched take during a service is a real risk.
+    setBusy(true)
+    compositor.take(trans.kind, duration * 1000)
+    setTimeout(() => setBusy(false), duration * 1000)
+  }
 
   return (
     <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-black flex flex-col">
@@ -381,34 +280,63 @@ function PreviewMonitor() {
         <span className="text-[12px] font-bold text-emerald-300/90">PREVIEW</span>
         <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prev?.label ?? '—'}</span>
       </div>
-      <SourceVideo key={previewId ?? 'none'} id={previewId} type={prev?.type} label={prev?.label ?? 'Select a source below'} className="aspect-video" />
+      {/* Composed preview — the same render path as program, so what you see
+          here is exactly what a TAKE will put on air. */}
+      <div className="relative aspect-video bg-black">
+        <canvas ref={canvasRef} className="w-full h-full object-cover" />
+        {!previewId && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-[11px] text-white/30">Select a source below</span>
+          </div>
+        )}
+      </div>
+
       <div className="px-3 py-2.5 bg-[#0c0c15] space-y-2.5">
         <div className="grid grid-cols-4 gap-1.5">
           {TRANSITIONS.map(t => (
             <button
-              key={t}
+              key={t.label}
               onClick={() => setTrans(t)}
               className={cn(
                 'py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-colors',
-                trans === t ? 'bg-purple-600 text-white' : 'bg-white/[0.05] text-white/50 hover:bg-white/10',
+                trans.label === t.label
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-white/[0.05] text-white/50 hover:bg-white/10',
               )}
-            >{t}</button>
+            >{t.label}</button>
           ))}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] text-white/55 font-mono">⏱ 1.0s · {trans}</span>
-          <button
-            onClick={take}
-            disabled={!previewId}
-            className={cn(
-              'flex-1 py-2 rounded-lg text-[13px] font-bold tracking-wider transition-colors',
-              previewId ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500'
-                        : 'bg-white/[0.05] text-white/25 cursor-not-allowed',
-            )}
-          >
-            TAKE
-          </button>
+
+        <div className="flex items-center gap-1.5">
+          {DURATIONS.map(d => (
+            <button
+              key={d}
+              onClick={() => setDuration(d)}
+              disabled={trans.kind === 'cut'}
+              className={cn(
+                'px-2 py-1 rounded-md text-[10.5px] font-mono transition-colors',
+                trans.kind === 'cut'
+                  ? 'text-white/20 cursor-not-allowed'
+                  : duration === d
+                    ? 'bg-white/15 text-white/90'
+                    : 'text-white/40 hover:bg-white/[0.07]',
+              )}
+            >{d.toFixed(1)}s</button>
+          ))}
         </div>
+
+        <button
+          onClick={take}
+          disabled={!previewId || busy}
+          className={cn(
+            'w-full py-2 rounded-lg text-[13px] font-bold tracking-wider transition-colors',
+            !previewId || busy
+              ? 'bg-white/[0.05] text-white/25 cursor-not-allowed'
+              : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500',
+          )}
+        >
+          {busy ? `${trans.label}…` : 'TAKE'}
+        </button>
       </div>
     </div>
   )
@@ -955,19 +883,3 @@ function MultiView() {
 
 // ── Bottom status bar ──────────────────────────────────────────────────────
 
-function BottomBar({ sourceCount, streaming }: { sourceCount: number; streaming: boolean }) {
-  return (
-    <footer className="h-7 shrink-0 flex items-center justify-between px-4 bg-[#0a0a12] border-t border-white/[0.06] text-[10.5px] text-white/45">
-      <div className="flex items-center gap-4">
-        <span className="flex items-center gap-1.5 font-semibold text-white/65"><Crown size={11} className="text-purple-400" /> GloryCast OS v1.0.0</span>
-        <span className="flex items-center gap-1 text-emerald-400"><Circle size={5} className="fill-emerald-400 text-emerald-400" /> Ready</span>
-      </div>
-      <div className="flex items-center gap-5">
-        <span>Sources: <b className="text-white/65 font-medium">{sourceCount}</b></span>
-        <span>Output: <b className="text-white/65 font-medium">1080p60</b></span>
-        <span>Stream: {streaming ? <b className="text-red-400 font-medium">● Live</b> : <b className="text-white/50 font-medium">Standby</b>}</span>
-      </div>
-      <span className="flex items-center gap-1.5">Auto Save: <b className="text-emerald-400">Enabled</b> <Circle size={5} className="fill-emerald-400 text-emerald-400" /></span>
-    </footer>
-  )
-}

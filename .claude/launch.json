@@ -7,6 +7,43 @@
       "runtimeArgs": ["run", "dev:renderer"],
       "port": 5173,
       "cwd": "apps/desktop"
+    },
+    {
+      "name": "signaturedna-ai",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5174,
+      "cwd": "D:\\PROJECTS\\Signature AI\\app"
+    },
+    {
+      "name": "genematch-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d D:\\PROJECTS\\GeneMatchAI\\app && flutter run -d web-server --web-port 5317"],
+      "port": 5317
+    },
+    {
+      "name": "churchflow-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d D:\\PROJECTS\\ChurchFlow\\apps\\web && npm run dev"],
+      "port": 5273
+    },
+    {
+      "name": "churchflow-mobile",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d D:\\PROJECTS\\ChurchFlow\\apps\\mobile && npx expo start --web --port 5279"],
+      "port": 5279
+    },
+    {
+      "name": "churchflow-api",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d D:\\PROJECTS\\ChurchFlow\\apps\\api && npm run dev"],
+      "port": 3101
+    },
+    {
+      "name": "theyvedltd",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d D:\\PROJECTS\\theyvedltd && npm run dev"],
+      "port": 3000
     }
   ]
 }

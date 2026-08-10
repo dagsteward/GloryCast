@@ -3,6 +3,7 @@ import { join } from 'path'
 import { createMediaEngine } from './media-engine'
 import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
+import { registerSystemStats } from './system-stats'
 import { AppStore } from './store'
 
 // The Vite dev server legitimately needs 'unsafe-eval', which always triggers
@@ -50,6 +51,11 @@ function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
+      // Chromium suspends rAF and clamps timers to ~1Hz in backgrounded
+      // windows. For a live switcher that would freeze program output the
+      // moment the operator minimises the window or moves to another desktop —
+      // the stream must keep running regardless of what has focus.
+      backgroundThrottling: false,
     },
     frame: process.platform !== 'darwin',
     show: false,
@@ -92,6 +98,9 @@ function createStageDisplay(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The stage display lives on a second monitor and is never focused —
+      // without this it would render at 1Hz for the entire service.
+      backgroundThrottling: false,
     },
     fullscreen: !!secondDisplay,
     show: false,
@@ -152,6 +161,7 @@ async function bootstrap() {
   }
 
   createIPCHandlers(store, windowManager)
+  registerSystemStats()
   createMainWindow()
 
   const mediaEngine = await createMediaEngine()

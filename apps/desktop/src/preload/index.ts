@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('glorycast', {
     saveFile: (options?: Electron.SaveDialogOptions) => ipcRenderer.invoke('dialog:saveFile', options),
   },
 
+  system: {
+    stats: () => ipcRenderer.invoke('system:stats'),
+  },
+
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),

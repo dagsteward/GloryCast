@@ -8,6 +8,7 @@ import {
 import { cn } from '../lib/utils'
 import { useMediaEngine } from '../hooks/useMediaEngine'
 import type { AppearanceConfig } from '../hooks/useMediaEngine'
+import { WorkspacePicker } from '../components/settings/WorkspacePicker'
 
 type SettingsSection = 'general' | 'audio-video' | 'streaming' | 'ai' | 'bible' | 'appearance' | 'security'
 
@@ -87,6 +88,15 @@ function AppearanceSettings() {
   return (
     <div>
       <SectionHeader title="Appearance" description="Customise the look and feel of GloryCast AI" />
+
+      {/* Workspace — the biggest appearance decision, so it leads. */}
+      <div className="border-b border-white/[0.05] pb-5 mb-5">
+        <div className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-1">Workspace</div>
+        <p className="text-[11.5px] text-white/40 mb-3">
+          Changes the layout, palette and which features are available. Switching takes effect immediately.
+        </p>
+        <WorkspacePicker />
+      </div>
 
       {/* Theme */}
       <div className="border-b border-white/[0.05] pb-5 mb-5">

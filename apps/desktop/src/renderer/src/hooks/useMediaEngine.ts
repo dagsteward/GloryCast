@@ -175,6 +175,27 @@ function createClockStream(): MediaStream {
   })
 }
 
+// Text / title source — word-wrapped centred text on a solid background.
+function createTextStream(text: string, bg = '#0b0b16', fg = '#ffffff'): MediaStream {
+  return makeCanvasStream((ctx, w, h) => {
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h)
+    ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.font = '700 96px system-ui, sans-serif'
+    const words = (text || 'Text').split(/\s+/)
+    const lines: string[] = []
+    let line = ''
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word
+      if (ctx.measureText(test).width > w * 0.86 && line) { lines.push(line); line = word }
+      else line = test
+    }
+    if (line) lines.push(line)
+    const lh = 120
+    const start = h / 2 - ((lines.length - 1) * lh) / 2
+    lines.forEach((l, i) => ctx.fillText(l, w / 2, start + i * lh))
+  }, 4)
+}
+
 // ─── Default appearance ───────────────────────────────────────────────────────
 
 const DEFAULT_APPEARANCE: AppearanceConfig = {
@@ -242,6 +263,7 @@ interface MediaEngineState {
   addImageSource:    (file: File) => string
   addCountdownSource:(minutes: number, label?: string) => string
   addClockSource:    () => string
+  addTextSource:     (text: string, label?: string) => string
   /** Add an NDI / network ingest source. Tries to attach a live stream from
    *  `url` when one is given (HTTP/MJPEG/MP4/WebM/HLS playable by <video>). */
   addNetworkSource:  (opts: { protocol: NetworkProtocol; url?: string; label?: string }) => string
@@ -419,6 +441,16 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
       _streams.set(id, createClockStream())
       set(s => ({ sources: [...s.sources, {
         id, label: 'Clock', type: 'clock',
+        active: true, hasVideo: true, hasAudio: false,
+      }] }))
+      return id
+    },
+
+    addTextSource: (text, label) => {
+      const id = uid('text')
+      _streams.set(id, createTextStream(text))
+      set(s => ({ sources: [...s.sources, {
+        id, label: label || (text ? text.slice(0, 18) : 'Text'), type: 'image',
         active: true, hasVideo: true, hasAudio: false,
       }] }))
       return id
