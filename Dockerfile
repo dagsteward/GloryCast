@@ -44,13 +44,14 @@ COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 COPY --from=build /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=build /app/apps/backend/package.json ./apps/backend/
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
+COPY --from=build /app/apps/backend/scripts ./apps/backend/scripts
 
 WORKDIR /app/apps/backend
 
 # Railway injects PORT; the app must bind to it and to 0.0.0.0, not localhost.
 EXPOSE 3001
 
-# Migrations run at boot so a deploy cannot serve a schema the database does
-# not have. `migrate deploy` only applies committed migrations — it never
-# generates or resets, so it is safe to run on every start.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+# start.mjs runs migrations then the app, logging each phase. A bare
+# `migrate deploy && node dist/main` hides the cause of a failed start behind
+# a generic healthcheck timeout.
+CMD ["node", "scripts/start.mjs"]
