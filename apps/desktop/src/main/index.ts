@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain, screen, shell, Menu, session, desktopCapturer } from 'electron'
 import { join } from 'path'
-import { createMediaEngine } from './media-engine'
 import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
 import { registerSystemStats } from './system-stats'
@@ -167,9 +166,6 @@ async function bootstrap() {
   registerEncoder(() => mainWindow)
   registerWhisper()
   createMainWindow()
-
-  const mediaEngine = await createMediaEngine()
-  await mediaEngine.initialize()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
