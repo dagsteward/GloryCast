@@ -25,6 +25,7 @@ import { NotificationModule } from './modules/notification/notification.module'
 import { AnalyticsModule }    from './modules/analytics/analytics.module'
 import { StageDisplayModule } from './modules/stage-display/stage-display.module'
 import { NDIEngineModule }    from './modules/ndi-engine/ndi-engine.module'
+import { LicensingModule } from './modules/licensing/licensing.module'
 
 // ── WebSocket gateways ────────────────────────────────────────────────────────
 import { AppGateway }    from './gateways/app.gateway'
@@ -87,6 +88,7 @@ import { AppController } from './app.controller'
     AnalyticsModule,
     StageDisplayModule,
     NDIEngineModule,
+    LicensingModule,
   ],
   controllers: [AppController],
   providers:   [AppGateway],

@@ -12,12 +12,31 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 async function bootstrap() {
   const logger = new Logger('GloryCast API')
 
+  const adapter = new FastifyAdapter({
+    logger: process.env.NODE_ENV === 'development',
+    trustProxy: true,
+  })
+
+  // Payment webhooks are HMAC-signed over the EXACT bytes received. Fastify
+  // parses JSON and discards the original text, and re-serialising the parsed
+  // object produces different bytes — key order and whitespace both differ —
+  // so the signature could never match. Retain the raw body for those routes.
+  adapter.getInstance().addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (request: any, body: string, done: (err: Error | null, result?: unknown) => void) => {
+      request.rawBody = body
+      try {
+        done(null, body === '' ? {} : JSON.parse(body))
+      } catch (err) {
+        done(err as Error)
+      }
+    },
+  )
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({
-      logger: process.env.NODE_ENV === 'development',
-      trustProxy: true,
-    }),
+    adapter,
     { bufferLogs: true },
   )
 

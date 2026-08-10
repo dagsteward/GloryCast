@@ -148,6 +148,7 @@ async function bootstrap() {
   // The built bundle needs no eval, so this closes the security gap without
   // breaking the dev server (which is left untouched and requires unsafe-eval).
   if (!DEV_SERVER_URL) {
+    const apiOrigin = (process.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/+$/, '')
     const csp = [
       "default-src 'self'",
       "img-src 'self' data: blob:",
@@ -155,7 +156,10 @@ async function bootstrap() {
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self'",
       "font-src 'self' data:",
-      "connect-src 'self' http://localhost:3001 ws://localhost:3001 wss: https:",
+      // The API origin is baked in at build time; allow it plus secure
+      // transports. Without this the packaged app silently fails every
+      // request to a deployed backend.
+      `connect-src 'self' ${apiOrigin} ${apiOrigin.replace(/^http/, 'ws')} wss: https:`,
     ].join('; ')
     session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
       cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })

@@ -4,6 +4,11 @@ export default () => ({
   apiPrefix: process.env.API_PREFIX  ?? 'api/v1',
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(','),
 
+  // Licensing secrets are read directly by name via ConfigService rather than
+  // nested, so a missing value is obvious in the logs at startup.
+  LICENSE_PRIVATE_KEY: process.env.LICENSE_PRIVATE_KEY,
+  PADDLE_WEBHOOK_SECRET: process.env.PADDLE_WEBHOOK_SECRET,
+
   database: {
     url: process.env.DATABASE_URL!,
   },

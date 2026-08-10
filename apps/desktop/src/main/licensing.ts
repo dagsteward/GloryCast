@@ -44,7 +44,8 @@ MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=
 
 /** Where the licence server lives. Configurable for self-hosting. */
 const LICENSE_API =
-  process.env.GLORYCAST_LICENSE_API ?? 'https://api.glorycast.ai/v1/licence'
+  process.env.GLORYCAST_LICENSE_API
+  ?? `${(process.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/+$/, '')}/api/v1/licence`
 
 function stateDir(): string {
   const dir = join(app.getPath('userData'), 'licence')

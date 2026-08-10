@@ -13,6 +13,7 @@ import {
   loadTranslation, getChapter, getVerseText, isBundled, BUNDLED_TRANSLATIONS,
   searchBibleMerged,
 } from './bibleData'
+import { apiUrl } from './api'
 
 // ── Scripture ────────────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ async function backendVerseText(book: string, chapter: number, verse: number | u
     const path = verse
       ? `/reference/${encodeURIComponent(book)}/${chapter}/${verse}?translation=${translation}`
       : `/reference/${encodeURIComponent(book)}/${chapter}?translation=${translation}`
-    const res = await fetch(`http://localhost:3001/api/v1/bible${path}`)
+    const res = await fetch(apiUrl(`bible${path}`))
     if (!res.ok) return ''
     const data = await res.json()
     const verses: any[] = data?.data?.verses ?? []

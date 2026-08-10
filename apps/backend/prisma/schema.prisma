@@ -100,16 +100,16 @@ model Church {
   updatedAt        DateTime         @updatedAt
 
   // Relations
-  users        ChurchMember[]
-  events       Event[]
-  streams      Stream[]
-  webinars     Webinar[]
-  media        MediaAsset[]
-  quizzes      Quiz[]
-  polls        Poll[]
-  sermons      Sermon[]
-  analytics    Analytic[]
-  apiKeys      ApiKey[]
+  users     ChurchMember[]
+  events    Event[]
+  streams   Stream[]
+  webinars  Webinar[]
+  media     MediaAsset[]
+  quizzes   Quiz[]
+  polls     Poll[]
+  sermons   Sermon[]
+  analytics Analytic[]
+  apiKeys   ApiKey[]
 
   @@index([slug])
 }
@@ -140,8 +140,8 @@ model User {
   churchMemberships ChurchMember[]
 
   // Activity
-  createdStreams   Stream[]       @relation("StreamCreator")
-  createdWebinars  Webinar[]      @relation("WebinarCreator")
+  createdStreams   Stream[]          @relation("StreamCreator")
+  createdWebinars  Webinar[]         @relation("WebinarCreator")
   webinarAttendees WebinarAttendee[]
   quizResponses    QuizResponse[]
   pollVotes        PollVote[]
@@ -166,11 +166,11 @@ model ChurchMember {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   userId    String
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -212,7 +212,7 @@ model Event {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  church   Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  church   Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
   streams  Stream[]
   sermons  Sermon[]
   webinars Webinar[]
@@ -223,34 +223,34 @@ model Event {
 // ─── Streams ──────────────────────────────────────────────────────────────────
 
 model Stream {
-  id            String       @id @default(cuid())
-  churchId      String
-  creatorId     String
-  eventId       String?
-  title         String
-  description   String?
-  status        StreamStatus @default(IDLE)
-  streamKey     String       @unique @default(cuid())
-  rtmpUrl       String?
-  playbackUrl   String?
-  thumbnailUrl  String?
-  isRecording   Boolean      @default(false)
-  recordingUrl  String?
-  viewerCount   Int          @default(0)
-  peakViewers   Int          @default(0)
-  startedAt     DateTime?
-  endedAt       DateTime?
-  durationSecs  Int?
-  destinations  Json         @default("[]") // [{platform, url, key, status}]
-  settings      Json         @default("{}")
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id           String       @id @default(cuid())
+  churchId     String
+  creatorId    String
+  eventId      String?
+  title        String
+  description  String?
+  status       StreamStatus @default(IDLE)
+  streamKey    String       @unique @default(cuid())
+  rtmpUrl      String?
+  playbackUrl  String?
+  thumbnailUrl String?
+  isRecording  Boolean      @default(false)
+  recordingUrl String?
+  viewerCount  Int          @default(0)
+  peakViewers  Int          @default(0)
+  startedAt    DateTime?
+  endedAt      DateTime?
+  durationSecs Int?
+  destinations Json         @default("[]") // [{platform, url, key, status}]
+  settings     Json         @default("{}")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  church       Church     @relation(fields: [churchId], references: [id], onDelete: Cascade)
-  creator      User       @relation("StreamCreator", fields: [creatorId], references: [id])
-  event        Event?     @relation(fields: [eventId], references: [id])
-  scenes       Scene[]
-  analytics    Analytic[]
+  church    Church     @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  creator   User       @relation("StreamCreator", fields: [creatorId], references: [id])
+  event     Event?     @relation(fields: [eventId], references: [id])
+  scenes    Scene[]
+  analytics Analytic[]
 
   @@index([churchId, status])
   @@index([streamKey])
@@ -311,16 +311,16 @@ model Webinar {
 }
 
 model WebinarAttendee {
-  id         String    @id @default(cuid())
-  webinarId  String
-  userId     String?
-  name       String
-  email      String?
-  joinedAt   DateTime  @default(now())
-  leftAt     DateTime?
-  isCoHost   Boolean   @default(false)
-  isMuted    Boolean   @default(false)
-  token      String?
+  id        String    @id @default(cuid())
+  webinarId String
+  userId    String?
+  name      String
+  email     String?
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+  isCoHost  Boolean   @default(false)
+  isMuted   Boolean   @default(false)
+  token     String?
 
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
   user    User?   @relation(fields: [userId], references: [id])
@@ -331,27 +331,27 @@ model WebinarAttendee {
 // ─── Media ────────────────────────────────────────────────────────────────────
 
 model MediaAsset {
-  id            String    @id @default(cuid())
-  churchId      String
-  uploadedById  String?
-  objectKey     String
-  fileName      String
-  title         String?
-  name          String    @default("")
-  assetType     String    @default("VIDEO")
-  type          MediaType @default(VIDEO)
-  mimeType      String
-  url           String
-  thumbnailUrl  String?
-  fileSize      BigInt    @default(0)
-  sizeBytes     BigInt    @default(0)
-  durationSecs  Int?
-  status        String    @default("READY")
-  metadata      Json      @default("{}")
-  tags          String[]
-  isPublic      Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  churchId     String
+  uploadedById String?
+  objectKey    String
+  fileName     String
+  title        String?
+  name         String    @default("")
+  assetType    String    @default("VIDEO")
+  type         MediaType @default(VIDEO)
+  mimeType     String
+  url          String
+  thumbnailUrl String?
+  fileSize     BigInt    @default(0)
+  sizeBytes    BigInt    @default(0)
+  durationSecs Int?
+  status       String    @default("READY")
+  metadata     Json      @default("{}")
+  tags         String[]
+  isPublic     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
 
@@ -392,17 +392,17 @@ model BibleVerse {
 }
 
 model BibleReference {
-  id          String   @id @default(cuid())
-  churchId    String?
-  streamId    String?
-  bookId      Int
-  chapter     Int
-  verse       Int?
-  verseEnd    Int?
-  translation String   @default("NIV")
+  id           String   @id @default(cuid())
+  churchId     String?
+  streamId     String?
+  bookId       Int
+  chapter      Int
+  verse        Int?
+  verseEnd     Int?
+  translation  String   @default("NIV")
   detectedText String?
-  confidence  Float?
-  detectedAt  DateTime @default(now())
+  confidence   Float?
+  detectedAt   DateTime @default(now())
 
   @@index([streamId, detectedAt])
 }
@@ -410,21 +410,21 @@ model BibleReference {
 // ─── Sermons ──────────────────────────────────────────────────────────────────
 
 model Sermon {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   churchId    String
   eventId     String?
   title       String
   speakerName String
   summary     String?
   transcript  String?
-  outline     Json?    // AI-generated outline
-  keyVerses   Json     @default("[]") // [{book, chapter, verse, text}]
+  outline     Json? // AI-generated outline
+  keyVerses   Json      @default("[]") // [{book, chapter, verse, text}]
   audioUrl    String?
   videoUrl    String?
   tags        String[]
   publishedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
   event  Event? @relation(fields: [eventId], references: [id])
@@ -435,19 +435,19 @@ model Sermon {
 // ─── AI Transcriptions ───────────────────────────────────────────────────────
 
 model Transcription {
-  id         String              @id @default(cuid())
-  streamId   String?
-  webinarId  String?
-  audioUrl   String?
-  language   String              @default("en")
-  model      String              @default("base.en")
-  status     TranscriptionStatus @default(PENDING)
-  text       String?
-  segments   Json?               // [{start, end, text, confidence}]
-  scriptures Json                @default("[]") // detected references
+  id           String              @id @default(cuid())
+  streamId     String?
+  webinarId    String?
+  audioUrl     String?
+  language     String              @default("en")
+  model        String              @default("base.en")
+  status       TranscriptionStatus @default(PENDING)
+  text         String?
+  segments     Json? // [{start, end, text, confidence}]
+  scriptures   Json                @default("[]") // detected references
   processingMs Int?
-  createdAt  DateTime            @default(now())
-  completedAt DateTime?
+  createdAt    DateTime            @default(now())
+  completedAt  DateTime?
 
   @@index([streamId])
   @@index([status])
@@ -478,16 +478,16 @@ model Quiz {
 }
 
 model QuizQuestion {
-  id             String   @id @default(cuid())
-  quizId         String
-  text           String
-  options        Json     // [{id, text, isCorrect}]
-  explanation    String?
-  points         Int      @default(10)
-  order          Int
-  imageUrl       String?
-  timeoutSecs    Int?
-  createdAt      DateTime @default(now())
+  id          String   @id @default(cuid())
+  quizId      String
+  text        String
+  options     Json // [{id, text, isCorrect}]
+  explanation String?
+  points      Int      @default(10)
+  order       Int
+  imageUrl    String?
+  timeoutSecs Int?
+  createdAt   DateTime @default(now())
 
   quiz      Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
   responses QuizResponse[]
@@ -496,16 +496,16 @@ model QuizQuestion {
 }
 
 model QuizResponse {
-  id         String   @id @default(cuid())
-  quizId     String
-  questionId String
-  userId     String?
-  sessionId  String   // anonymous support
-  answer     String
-  isCorrect  Boolean
-  pointsEarned Int    @default(0)
-  responseMs Int?
-  answeredAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  quizId       String
+  questionId   String
+  userId       String?
+  sessionId    String // anonymous support
+  answer       String
+  isCorrect    Boolean
+  pointsEarned Int      @default(0)
+  responseMs   Int?
+  answeredAt   DateTime @default(now())
 
   quiz     Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
   question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -523,7 +523,7 @@ model Poll {
   streamId      String?
   webinarId     String?
   question      String
-  options       Json       // [{id, text, votes}]
+  options       Json // [{id, text, votes}]
   status        PollStatus @default(DRAFT)
   allowMultiple Boolean    @default(false)
   showResults   Boolean    @default(true)
@@ -533,8 +533,8 @@ model Poll {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  church  Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
-  webinar Webinar?  @relation(fields: [webinarId], references: [id])
+  church  Church     @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  webinar Webinar?   @relation(fields: [webinarId], references: [id])
   votes   PollVote[]
 
   @@index([churchId, status])
@@ -559,8 +559,8 @@ model PollVote {
 // ─── Q&A ─────────────────────────────────────────────────────────────────────
 
 model QAQuestion {
-  id          String   @id @default(cuid())
-  churchId    String   @default("")
+  id          String    @id @default(cuid())
+  churchId    String    @default("")
   streamId    String?
   webinarId   String?
   userId      String?
@@ -568,13 +568,13 @@ model QAQuestion {
   authorName  String
   text        String
   answer      String?
-  isAnonymous Boolean  @default(false)
-  isAnswered  Boolean  @default(false)
-  isApproved  Boolean  @default(true)
-  isStarred   Boolean  @default(false)
-  upvotes     Int      @default(0)
+  isAnonymous Boolean   @default(false)
+  isAnswered  Boolean   @default(false)
+  isApproved  Boolean   @default(true)
+  isStarred   Boolean   @default(false)
+  upvotes     Int       @default(0)
   answeredAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   webinar Webinar? @relation(fields: [webinarId], references: [id], onDelete: Cascade)
   user    User?    @relation(fields: [userId], references: [id])
@@ -586,14 +586,14 @@ model QAQuestion {
 // ─── Stage Display ────────────────────────────────────────────────────────────
 
 model StageDisplay {
-  id          String   @id @default(cuid())
-  churchId    String   @unique
-  name        String   @default("Main Stage")
-  content     Json     @default("{\"type\":\"BLANK\"}")
-  config      Json     @default("{}")
-  isActive    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  churchId  String   @unique
+  name      String   @default("Main Stage")
+  content   Json     @default("{\"type\":\"BLANK\"}")
+  config    Json     @default("{}")
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([churchId])
 }
@@ -604,7 +604,7 @@ model Analytic {
   id         String   @id @default(cuid())
   churchId   String
   streamId   String?
-  eventType  String   // viewer_join, viewer_leave, reaction, scripture_detected, etc.
+  eventType  String // viewer_join, viewer_leave, reaction, scripture_detected, etc.
   sessionId  String?
   userId     String?
   platform   String?
@@ -620,20 +620,20 @@ model Analytic {
 }
 
 model ViewerSession {
-  id                 String    @id @default(cuid())
-  churchId           String
-  streamId           String?
-  sessionId          String
-  platform           String?
-  country            String?
-  city               String?
-  deviceType         String?
-  joinedAt           DateTime  @default(now())
-  leftAt             DateTime?
-  durationSecs       Int?
-  concurrentViewers  Int?
+  id                String    @id @default(cuid())
+  churchId          String
+  streamId          String?
+  sessionId         String
+  platform          String?
+  country           String?
+  city              String?
+  deviceType        String?
+  joinedAt          DateTime  @default(now())
+  leftAt            DateTime?
+  durationSecs      Int?
+  concurrentViewers Int?
 
-  createdAt          DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([churchId, streamId, joinedAt])
   @@index([churchId, createdAt])
@@ -654,4 +654,96 @@ model Notification {
 
   @@index([churchId, userId, isRead])
   @@index([churchId, isBroadcast, createdAt])
+}
+
+// ─── Licensing ────────────────────────────────────────────────────────────────
+// GloryCast desktop is sold as an annual subscription. The server is the sole
+// authority on entitlement and the only holder of the signing key; the desktop
+// app verifies signed licences offline so a service never depends on us being
+// reachable.
+
+enum LicenseStatus {
+  /// Paid and within its term.
+  ACTIVE
+  /// Payment failed; still usable during the dunning window.
+  PAST_DUE
+  /// Deliberately ended by the customer or by us.
+  CANCELLED
+  /// Term elapsed without renewal.
+  EXPIRED
+  /// Withdrawn for abuse or chargeback. Never re-signs.
+  REVOKED
+}
+
+model License {
+  id           String        @id @default(cuid())
+  /// Human-facing key the customer types in. Stored uppercase, no separators.
+  key          String        @unique
+  organisation String
+  email        String
+  status       LicenseStatus @default(ACTIVE)
+
+  /// Current subscription term.
+  issuedAt  DateTime @default(now())
+  expiresAt DateTime
+
+  /// Concurrent machines permitted.
+  seats Int @default(2)
+
+  /// Payment provider linkage. Nullable so licences can be issued manually
+  /// for pilots, ministry gifts and support replacements.
+  provider               String?
+  providerCustomerId     String?
+  providerSubscriptionId String? @unique
+
+  /// Optional link to a church record once the customer signs in.
+  churchId String?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  devices LicenseDevice[]
+  events  LicenseEvent[]
+
+  @@index([key])
+  @@index([email])
+  @@index([providerCustomerId])
+  @@index([status, expiresAt])
+}
+
+model LicenseDevice {
+  id         String  @id @default(cuid())
+  licenseId  String
+  /// Fingerprint reported by the desktop app.
+  deviceId   String
+  deviceName String?
+  appVersion String?
+
+  activatedAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  /// Set when the seat is released; the row is kept for audit.
+  releasedAt  DateTime?
+
+  license License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  /// One row per machine per licence — re-activating updates rather than
+  /// consuming a second seat.
+  @@unique([licenseId, deviceId])
+  @@index([deviceId])
+}
+
+model LicenseEvent {
+  id        String   @id @default(cuid())
+  licenseId String
+  /// activate | refresh | deactivate | issued | renewed | cancelled | revoked
+  type      String
+  detail    String?
+  deviceId  String?
+  ipHash    String?
+  createdAt DateTime @default(now())
+
+  license License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@index([licenseId, createdAt])
 }
