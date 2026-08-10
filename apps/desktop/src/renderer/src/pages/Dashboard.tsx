@@ -44,6 +44,7 @@ function fmtCountdown(target: number, now: number) {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const { church, userDisplayName, connectionStatus, destinations } = useAppStore()
 
   const serviceActive    = useServiceStore(s => s.serviceActive)

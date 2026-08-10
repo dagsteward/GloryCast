@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
+import { sep } from 'path'
 import { ipcMain, type BrowserWindow } from 'electron'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,10 +54,32 @@ export interface EncoderStats {
 
 export type EncoderState = 'idle' | 'starting' | 'live' | 'stopping' | 'error'
 
+/**
+ * Locate the FFmpeg binary.
+ *
+ * ffmpeg-static ships a binary with the app so a volunteer never has to
+ * install anything — "add FFmpeg to your PATH" is not a reasonable Sunday
+ * morning instruction. Inside a packaged app the binary lives in the asar
+ * archive, which cannot be executed, so electron-builder unpacks it and we
+ * rewrite the path accordingly. A PATH lookup remains the last resort.
+ */
+function resolveFfmpegPath(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const bundled = require('ffmpeg-static') as string | null
+    if (bundled) {
+      return bundled.replace('app.asar' + sep, 'app.asar.unpacked' + sep)
+    }
+  } catch {
+    // Not installed — fall through to PATH.
+  }
+  return 'ffmpeg'
+}
+
 class Encoder extends EventEmitter {
   private process: ChildProcess | null = null
   private state: EncoderState = 'idle'
-  private ffmpegPath = 'ffmpeg'
+  private ffmpegPath = resolveFfmpegPath()
   private available = false
   /** Tail of FFmpeg's stderr, kept so a failure can be reported usefully. */
   private stderrTail: string[] = []

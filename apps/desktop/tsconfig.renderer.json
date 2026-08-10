@@ -1,0 +1,24 @@
+{
+  // Type-checking ONLY — the renderer is bundled by Vite/esbuild, which strips
+  // types without checking them. Without this, an undefined reference or a
+  // renamed store action ships happily and fails at runtime in front of a
+  // congregation. `npm run type-check` is the safety net; it never emits.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/src/*"],
+      "@glorycast/media-engine": ["../../packages/media-engine/src/index.ts"],
+      "@glorycast/ai-core": ["../../packages/ai-core/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/renderer/src/**/*.ts",
+    "src/renderer/src/**/*.tsx",
+    "../../packages/media-engine/src/**/*.ts",
+    "../../packages/ai-core/src/**/*.ts"
+  ]
+}

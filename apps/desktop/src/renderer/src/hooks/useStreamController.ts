@@ -234,7 +234,7 @@ export function useStreamController(): StreamController {
     // Give the recorder a moment to flush its final chunk before FFmpeg's
     // stdin closes, so the recording gets a valid trailer.
     await new Promise(resolve => setTimeout(resolve, CHUNK_MS * 2))
-    await window.glorycast?.encoder.stop()
+    await window.glorycast?.encoder?.stop()
     cleanupCapture()
     setStats(null)
     setState('idle')

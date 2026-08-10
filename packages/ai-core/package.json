@@ -1,0 +1,16 @@
+{
+  "name": "@glorycast/ai-core",
+  "version": "1.0.0",
+  "description": "GloryCast AI — speech recognition, voice activity detection, and scripture-aware language priors",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

@@ -19,6 +19,13 @@ contextBridge.exposeInMainWorld('glorycast', {
     stats: () => ipcRenderer.invoke('system:stats'),
   },
 
+  whisper: {
+    availability: () => ipcRenderer.invoke('whisper:availability'),
+    modelsDir: () => ipcRenderer.invoke('whisper:models-dir'),
+    transcribe: (payload: { wav: ArrayBuffer; model: string; prompt: string }) =>
+      ipcRenderer.invoke('whisper:transcribe', payload),
+  },
+
   encoder: {
     available: () => ipcRenderer.invoke('encoder:available'),
     state: () => ipcRenderer.invoke('encoder:state'),

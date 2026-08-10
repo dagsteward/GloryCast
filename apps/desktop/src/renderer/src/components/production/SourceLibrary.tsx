@@ -189,8 +189,10 @@ export function SourceLibrary() {
         )}
 
         {sources.map(src => {
-          const Icon = TYPE_ICON[src.type]
-          const color = TYPE_COLOR[src.type]
+          // The maps intentionally cover only common types; anything else
+          // falls back rather than rendering undefined.
+          const Icon = TYPE_ICON[src.type as keyof typeof TYPE_ICON] ?? TYPE_ICON.camera
+          const color = TYPE_COLOR[src.type as keyof typeof TYPE_COLOR] ?? TYPE_COLOR.camera
           const isPreview = src.id === previewId
           const isProgram = src.id === programId
           const stream = getStream(src.id)

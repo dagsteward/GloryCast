@@ -13,7 +13,7 @@ if (typeof window !== 'undefined' && !window.glorycast) {
       saveFile: async () => null,
     },
     shell: {
-      openPath: async () => {},
+      openPath: async () => '',
       openExternal: async (url) => { window.open(url, '_blank') },
     },
     window: {

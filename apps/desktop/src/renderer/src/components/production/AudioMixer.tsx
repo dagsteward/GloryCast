@@ -88,7 +88,9 @@ function VerticalFader({ value, onChange, compact, color = 'white' }: {
       style={{
         writingMode: 'vertical-lr' as const,
         direction:   'rtl' as const,
-        appearance:  'slider-vertical',
+        // Non-standard WebKit property for vertical range inputs; absent
+        // from React's CSSProperties, hence the cast.
+        appearance:  'slider-vertical' as unknown as undefined,
         width:  '18px',
         height: `${h}px`,
         accentColor: color === 'purple' ? '#7c3aed' : '#fff',

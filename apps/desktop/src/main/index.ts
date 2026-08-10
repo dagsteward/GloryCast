@@ -5,6 +5,7 @@ import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
 import { registerSystemStats } from './system-stats'
 import { registerEncoder, shutdownEncoder } from './encoder'
+import { registerWhisper } from './whisper'
 import { AppStore } from './store'
 
 // The Vite dev server legitimately needs 'unsafe-eval', which always triggers
@@ -164,6 +165,7 @@ async function bootstrap() {
   createIPCHandlers(store, windowManager)
   registerSystemStats()
   registerEncoder(() => mainWindow)
+  registerWhisper()
   createMainWindow()
 
   const mediaEngine = await createMediaEngine()

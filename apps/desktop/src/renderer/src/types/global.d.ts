@@ -30,10 +30,28 @@ export interface GloryCastAPI {
     openDirectory: () => Promise<string | null>
     saveFile: (options?: unknown) => Promise<string | null>
   }
-  system: {
+  /**
+   * Capabilities that exist only in the desktop app. They are absent in the
+   * browser dev preview, and marking them optional forces every call site to
+   * handle that rather than crashing — these cannot be meaningfully stubbed.
+   */
+  system?: {
     stats: () => Promise<GloryCastSystemStats>
   }
-  encoder: {
+  whisper?: {
+    availability: () => Promise<{
+      ready: boolean
+      binary: string | null
+      installedModels: string[]
+      detail: string
+    }>
+    modelsDir: () => Promise<string>
+    transcribe: (payload: { wav: ArrayBuffer; model: string; prompt: string }) => Promise<
+      | { ok: true; result: { text: string; elapsedSec: number } | null }
+      | { ok: false; error: string }
+    >
+  }
+  encoder?: {
     available: () => Promise<boolean>
     state: () => Promise<string>
     start: (config: unknown) => Promise<{ ok: true } | { ok: false; error: string }>

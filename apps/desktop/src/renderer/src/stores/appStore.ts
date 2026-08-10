@@ -80,6 +80,12 @@ interface AppState {
   // Song library (persisted)
   songLibrary: SavedSong[]
 
+  // Speech recognition
+  /** deviceId of the input the AI listens to. Empty = system default. */
+  asrDeviceId: string
+  /** Whisper model id, e.g. "base.en". */
+  asrModel: string
+
   // UI
   aiPanelOpen:      boolean
   connectionStatus: 'connected' | 'disconnected' | 'connecting'
@@ -92,6 +98,8 @@ interface AppState {
   setStreamKey: (k: string) => void
   setViewerCount: (n: number) => void
   setDestinations: (d: StreamDestination[]) => void
+  setAsrDevice: (id: string) => void
+  setAsrModel: (id: string) => void
   updateDestination: (id: string, patch: Partial<StreamDestination>) => void
   setProgramSource: (id: string) => void
   setPreviewSource: (id: string) => void
@@ -164,6 +172,9 @@ export const useAppStore = create<AppState>()(
         },
         lastServiceDate: new Date(Date.now() - 7 * 86400000).toISOString(),
 
+        asrDeviceId: '',
+        asrModel: 'base.en',
+
         // Song library
         songLibrary: [],
 
@@ -179,6 +190,8 @@ export const useAppStore = create<AppState>()(
         setStreamKey: (k) => set({ streamKey: k }),
         setViewerCount: (n) => set({ viewerCount: n }),
         setDestinations: (d) => set({ destinations: d }),
+        setAsrDevice: (id) => set({ asrDeviceId: id }),
+        setAsrModel: (id) => set({ asrModel: id }),
         updateDestination: (id, patch) => set(s => ({
           destinations: s.destinations.map(d => d.id === id ? { ...d, ...patch } : d),
         })),

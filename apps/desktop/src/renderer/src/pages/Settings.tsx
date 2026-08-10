@@ -10,6 +10,8 @@ import { useMediaEngine } from '../hooks/useMediaEngine'
 import type { AppearanceConfig } from '../hooks/useMediaEngine'
 import { WorkspacePicker } from '../components/settings/WorkspacePicker'
 import { useAppStore } from '../stores/appStore'
+import { useServiceStore } from '../stores/serviceStore'
+import { WHISPER_MODELS } from '@glorycast/ai-core'
 
 type SettingsSection = 'general' | 'audio-video' | 'streaming' | 'ai' | 'bible' | 'appearance' | 'security'
 
@@ -409,33 +411,122 @@ function AVSettings() {
 // ─── AI Settings ──────────────────────────────────────────────────────────────
 
 function AISettings() {
-  const [openaiKey,          setOpenaiKey]          = useState('')
-  const [ollamaUrl,          setOllamaUrl]          = useState('http://localhost:11434')
-  const [scriptureDetection, setScriptureDetection] = useState(true)
-  const [autoDisplay,        setAutoDisplay]        = useState(false)
-  const [whisperModel,       setWhisperModel]       = useState('base.en')
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
+
+  const asrDeviceId  = useAppStore(s => s.asrDeviceId)
+  const setAsrDevice = useAppStore(s => s.setAsrDevice)
+  const asrModel     = useAppStore(s => s.asrModel)
+  const setAsrModel  = useAppStore(s => s.setAsrModel)
+
+  const autoPilot       = useServiceStore(s => s.autoPilot)
+  const toggleAutoPilot = useServiceStore(s => s.toggleAutoPilot)
+
+  const [inputs, setInputs] = useState<MediaDeviceInfo[]>([])
+  const [whisper, setWhisper] = useState<{
+    ready: boolean; installedModels: string[]; detail: string
+  } | null>(null)
+  const [modelsDir, setModelsDir] = useState('')
+
+  useEffect(() => {
+    // Labels are only populated once the user has granted mic permission.
+    void navigator.mediaDevices?.enumerateDevices()
+      .then(all => setInputs(all.filter(d => d.kind === 'audioinput')))
+      .catch(() => setInputs([]))
+
+    void window.glorycast?.whisper?.availability().then(setWhisper).catch(() => setWhisper(null))
+    void window.glorycast?.whisper?.modelsDir().then(setModelsDir).catch(() => {})
+  }, [])
 
   return (
     <div>
-      <SectionHeader title="AI Services" description="Configure AI providers for scripture detection, transcription, and content generation" />
+      <SectionHeader
+        title="AI Services"
+        description="Scripture detection listens to a chosen audio input and transcribes it on this machine."
+      />
+
+      {/* Engine status — the operator must know which engine is running,
+          because the fallback has real privacy and reliability consequences. */}
+      <div className={cn(
+        'rounded-xl border p-3.5 mb-5',
+        whisper?.ready
+          ? 'border-emerald-500/25 bg-emerald-500/[0.06]'
+          : 'border-amber-500/25 bg-amber-500/[0.06]',
+      )}>
+        <div className="flex items-center gap-2 mb-1">
+          {whisper?.ready
+            ? <CheckCircle2 size={14} className="text-emerald-400" />
+            : <AlertCircle size={14} className="text-amber-400" />}
+          <span className="text-[13px] font-semibold text-white/85">
+            {whisper?.ready ? 'Local transcription active' : 'Local transcription unavailable'}
+          </span>
+        </div>
+        <p className="text-[11.5px] leading-relaxed text-white/50">
+          {whisper?.detail ?? 'Checking…'}
+        </p>
+        {!whisper?.ready && (
+          <p className="text-[11.5px] leading-relaxed text-amber-300/80 mt-1.5">
+            GloryCast will fall back to online recognition: audio leaves this machine,
+            it needs an internet connection, and it can only hear the default microphone.
+          </p>
+        )}
+        {modelsDir && (
+          <p className="text-[10.5px] text-white/30 mt-2 font-mono break-all">
+            Models: {modelsDir}
+          </p>
+        )}
+      </div>
+
       <div className="space-y-0">
-        <SettingRow label="OpenAI API Key" description="Used for GPT-4o content generation">
+        <SettingRow
+          label="Listening Input"
+          description="Choose the soundboard or mic feed the AI transcribes — not necessarily the system default."
+        >
+          <select
+            value={asrDeviceId}
+            onChange={e => setAsrDevice(e.target.value)}
+            className="w-64 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none"
+          >
+            <option value="">System default</option>
+            {inputs.map(d => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || `Input ${d.deviceId.slice(0, 6)}`}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+
+        <SettingRow label="Whisper Model" description="Larger models are more accurate but slower.">
+          <select
+            value={asrModel}
+            onChange={e => setAsrModel(e.target.value)}
+            className="w-64 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none"
+          >
+            {WHISPER_MODELS.map(m => (
+              <option key={m.id} value={m.id}>
+                {m.label} · {m.sizeMb} MB
+                {whisper?.installedModels.includes(m.id) ? ' (installed)' : ''}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+
+        <div className="py-2 text-[11.5px] text-white/40 border-b border-white/[0.05]">
+          {WHISPER_MODELS.find(m => m.id === asrModel)?.note}
+        </div>
+
+        <SettingRow
+          label="Auto-project confident detections"
+          description="Send a detected verse to Preview automatically when the match is strong."
+        >
+          <Toggle value={autoPilot} onChange={toggleAutoPilot} />
+        </SettingRow>
+
+        <SettingRow label="OpenAI API Key" description="Used for sermon content generation">
           <Input value={openaiKey} onChange={setOpenaiKey} placeholder="sk-..." type="password" />
         </SettingRow>
         <SettingRow label="Ollama Server URL" description="Local LLM server for offline AI processing">
           <Input value={ollamaUrl} onChange={setOllamaUrl} placeholder="http://localhost:11434" />
-        </SettingRow>
-        <SettingRow label="Whisper Model" description="Speech recognition model for scripture detection">
-          <select value={whisperModel} onChange={e => setWhisperModel(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none">
-            {['tiny.en','base.en','small.en','medium.en','large-v3'].map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </SettingRow>
-        <SettingRow label="Scripture Detection" description="Automatically detect Bible references from live audio">
-          <Toggle value={scriptureDetection} onChange={setScriptureDetection} />
-        </SettingRow>
-        <SettingRow label="Auto-Display Detected Scripture" description="Automatically send detected scriptures to output">
-          <Toggle value={autoDisplay} onChange={setAutoDisplay} />
         </SettingRow>
       </div>
     </div>

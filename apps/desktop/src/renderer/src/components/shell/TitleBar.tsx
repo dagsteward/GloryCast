@@ -7,9 +7,11 @@ export function TitleBar() {
   const { isStreaming, streamHealth, connectionStatus } = useAppStore()
   const isMac = navigator.platform.toLowerCase().includes('mac')
 
-  const handleMinimize = () => window.glorycast.window.minimize()
-  const handleMaximize = () => window.glorycast.window.maximize()
-  const handleClose = () => window.glorycast.window.close()
+  // Optional: the renderer also runs in a plain browser during dev, where
+  // no preload bridge exists and these would throw.
+  const handleMinimize = () => window.glorycast?.window.minimize()
+  const handleMaximize = () => window.glorycast?.window.maximize()
+  const handleClose = () => window.glorycast?.window.close()
 
   return (
     <div
