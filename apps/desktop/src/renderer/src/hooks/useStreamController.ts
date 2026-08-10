@@ -157,6 +157,16 @@ export function useStreamController(): StreamController {
       return
     }
 
+    // Licence gate. Deliberately checked only when STARTING: an expired
+    // licence must never interrupt a broadcast already on air. A church
+    // mid-service is the worst possible moment to enforce billing.
+    const licence = await window.glorycast?.licence?.status().catch(() => null)
+    if (licence?.blockNewBroadcast) {
+      setError(licence.message)
+      setState('error')
+      return
+    }
+
     const mimeType = chooseMimeType()
     if (!mimeType) {
       setError('This build has no WebM encoder available for capture.')

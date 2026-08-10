@@ -38,6 +38,15 @@ export interface GloryCastAPI {
   system?: {
     stats: () => Promise<GloryCastSystemStats>
   }
+  licence?: {
+    status: () => Promise<import('@glorycast/licensing').Entitlement>
+    deviceId: () => Promise<string>
+    activate: (key: string) => Promise<
+      | { ok: true; entitlement: import('@glorycast/licensing').Entitlement }
+      | { ok: false; error: string }
+    >
+    deactivate: () => Promise<{ ok: true; entitlement: import('@glorycast/licensing').Entitlement }>
+  }
   whisper?: {
     availability: () => Promise<{
       ready: boolean

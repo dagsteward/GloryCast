@@ -5,6 +5,7 @@ import { createWindowManager } from './window-manager'
 import { registerSystemStats } from './system-stats'
 import { registerEncoder, shutdownEncoder } from './encoder'
 import { registerWhisper } from './whisper'
+import { registerLicensing } from './licensing'
 import { AppStore } from './store'
 
 // The Vite dev server legitimately needs 'unsafe-eval', which always triggers
@@ -165,6 +166,7 @@ async function bootstrap() {
   registerSystemStats()
   registerEncoder(() => mainWindow)
   registerWhisper()
+  registerLicensing()
   createMainWindow()
 
   app.on('activate', () => {

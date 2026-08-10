@@ -22,6 +22,7 @@
       "@glorycast/shared-types": ["./packages/shared-types/src/index.ts"],
       "@glorycast/bible-engine": ["./packages/bible-engine/src/index.ts"],
       "@glorycast/media-engine": ["./packages/media-engine/src/index.ts"],
+      "@glorycast/licensing": ["./packages/licensing/src/index.ts"],
       "@glorycast/ai-core": ["./packages/ai-core/src/index.ts"]
     }
   }

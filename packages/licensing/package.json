@@ -1,0 +1,15 @@
+{
+  "name": "@glorycast/licensing",
+  "version": "1.0.0",
+  "description": "GloryCast AI \u2014 trial, licence validation and entitlement logic",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

@@ -5,6 +5,7 @@ import { StatusBar } from '../components/shell/StatusBar'
 import { MinimalTopNav } from '../components/shell/MinimalTopNav'
 import { CommandBar } from '../components/shell/CommandBar'
 import { AIAssistantPanel } from '../components/ai/AIAssistantPanel'
+import { LicenceBanner } from '../components/licence/LicenceBanner'
 import { useAppStore } from '../stores/appStore'
 import { useWorkspace } from '../stores/workspaceStore'
 import { useWorkspaceTheme } from '../hooks/useWorkspaceTheme'
@@ -38,6 +39,7 @@ export function MainLayout() {
   if (workspace.chrome === 'top') {
     return (
       <div className="flex flex-col w-full h-full bg-app overflow-hidden">
+        <LicenceBanner />
         <MinimalTopNav />
         <div className="flex flex-1 overflow-hidden">
           {content}
@@ -51,6 +53,7 @@ export function MainLayout() {
   if (workspace.chrome === 'command') {
     return (
       <div className="flex flex-col w-full h-full bg-app overflow-hidden">
+        <LicenceBanner />
         <CommandBar />
         <div className="flex flex-1 overflow-hidden">
           {content}
@@ -64,6 +67,8 @@ export function MainLayout() {
   // ── Cinematic Broadcast: full-height brand rail + vitals bar + status rail ─
   return (
     <div className="flex flex-col w-full h-full bg-app overflow-hidden">
+      <LicenceBanner />
+
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
 

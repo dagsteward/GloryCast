@@ -28,3 +28,7 @@ packages/bible-engine/*.mdw
 
 # Raw Bible source dumps (processed into apps/desktop/.../public/bible)
 .bible-src/
+
+# tsc occasionally emits alongside sources; never commit compiled output there
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map

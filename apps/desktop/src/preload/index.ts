@@ -19,6 +19,13 @@ contextBridge.exposeInMainWorld('glorycast', {
     stats: () => ipcRenderer.invoke('system:stats'),
   },
 
+  licence: {
+    status: () => ipcRenderer.invoke('licence:status'),
+    deviceId: () => ipcRenderer.invoke('licence:device-id'),
+    activate: (key: string) => ipcRenderer.invoke('licence:activate', key),
+    deactivate: () => ipcRenderer.invoke('licence:deactivate'),
+  },
+
   whisper: {
     availability: () => ipcRenderer.invoke('whisper:availability'),
     modelsDir: () => ipcRenderer.invoke('whisper:models-dir'),

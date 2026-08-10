@@ -14,6 +14,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src/renderer/src'),
       '@glorycast/media-engine': path.resolve(__dirname, '../../packages/media-engine/src/index.ts'),
       '@glorycast/ai-core': path.resolve(__dirname, '../../packages/ai-core/src/index.ts'),
+      '@glorycast/licensing': path.resolve(__dirname, '../../packages/licensing/src/index.ts'),
     },
   },
   server: {
