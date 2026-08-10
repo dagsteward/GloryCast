@@ -4,6 +4,7 @@ import { createMediaEngine } from './media-engine'
 import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
 import { registerSystemStats } from './system-stats'
+import { registerEncoder, shutdownEncoder } from './encoder'
 import { AppStore } from './store'
 
 // The Vite dev server legitimately needs 'unsafe-eval', which always triggers
@@ -162,6 +163,7 @@ async function bootstrap() {
 
   createIPCHandlers(store, windowManager)
   registerSystemStats()
+  registerEncoder(() => mainWindow)
   createMainWindow()
 
   const mediaEngine = await createMediaEngine()
@@ -189,6 +191,14 @@ async function bootstrap() {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// FFmpeg is a detached child process; without this it can outlive the app and
+// keep holding the RTMP connection open, which some platforms treat as a
+// still-live stream long after the operator has closed GloryCast.
+app.on('before-quit', (event) => {
+  event.preventDefault()
+  void shutdownEncoder().finally(() => app.exit(0))
 })
 
 bootstrap().catch(console.error)

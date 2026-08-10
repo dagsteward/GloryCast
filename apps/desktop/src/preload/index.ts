@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld('glorycast', {
     stats: () => ipcRenderer.invoke('system:stats'),
   },
 
+  encoder: {
+    available: () => ipcRenderer.invoke('encoder:available'),
+    state: () => ipcRenderer.invoke('encoder:state'),
+    start: (config: unknown) => ipcRenderer.invoke('encoder:start', config),
+    stop: () => ipcRenderer.invoke('encoder:stop'),
+    // Fire-and-forget: a promise per media chunk would add needless overhead
+    // at ~4 chunks a second for the whole service.
+    chunk: (data: ArrayBuffer) => ipcRenderer.send('encoder:chunk', data),
+  },
+
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
@@ -38,6 +48,7 @@ contextBridge.exposeInMainWorld('glorycast', {
       'stream-stats', 'stream-started', 'stream-ended',
       'frame', 'device-stopped', 'media-ready',
       'scripture-detected', 'transcription-update',
+      'encoder:stats', 'encoder:state', 'encoder:error', 'encoder:ended',
     ]
     if (validChannels.includes(channel)) {
       ipcRenderer.on(channel, (_event, ...args) => callback(...args))

@@ -12,7 +12,14 @@ export interface StreamHealth {
 export interface StreamDestination {
   id:       string
   name:     string
+  /** Ingest URL WITHOUT the key, e.g. "rtmp://a.rtmp.youtube.com/live2/". */
   rtmpUrl:  string
+  /**
+   * Per-destination stream key. Each platform issues its own, so a single
+   * app-wide key cannot work once you are streaming to more than one place.
+   * Empty means the destination is not yet configured and cannot go live.
+   */
+  streamKey: string
   enabled:  boolean
   viewers:  number
   bitrate:  number
@@ -102,10 +109,13 @@ interface AppState {
 }
 
 const DEFAULT_DESTINATIONS: StreamDestination[] = [
-  { id: 'yt',  name: 'YouTube Live',    rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2/', enabled: true,  viewers: 0, bitrate: 0, health: 0, status: 'idle' },
-  { id: 'fb',  name: 'Facebook Live',   rtmpUrl: 'rtmps://live-api-s.facebook.com:443/rtmp/', enabled: true,  viewers: 0, bitrate: 0, health: 0, status: 'idle' },
-  { id: 'web', name: 'Church Website',  rtmpUrl: 'rtmp://stream.glorycast.ai/live/', enabled: true,  viewers: 0, bitrate: 0, health: 0, status: 'idle' },
-  { id: 'twitch', name: 'Twitch',       rtmpUrl: 'rtmp://live.twitch.tv/app/',       enabled: false, viewers: 0, bitrate: 0, health: 0, status: 'idle' },
+  // Enabled defaults to false: a destination with no stream key cannot go
+  // live, and pre-arming them would let an operator hit Go Live expecting
+  // four platforms and reach none of them.
+  { id: 'yt',  name: 'YouTube Live',    rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2/', streamKey: '', enabled: false, viewers: 0, bitrate: 0, health: 0, status: 'idle' },
+  { id: 'fb',  name: 'Facebook Live',   rtmpUrl: 'rtmps://live-api-s.facebook.com:443/rtmp/', streamKey: '', enabled: false, viewers: 0, bitrate: 0, health: 0, status: 'idle' },
+  { id: 'twitch', name: 'Twitch',       rtmpUrl: 'rtmp://live.twitch.tv/app/',       streamKey: '', enabled: false, viewers: 0, bitrate: 0, health: 0, status: 'idle' },
+  { id: 'custom', name: 'Custom RTMP',  rtmpUrl: '',                                 streamKey: '', enabled: false, viewers: 0, bitrate: 0, health: 0, status: 'idle' },
 ]
 
 export const useAppStore = create<AppState>()(

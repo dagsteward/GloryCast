@@ -15,6 +15,8 @@ import {
 } from '../hooks/useCompositor'
 import { useMediaEngine, getStream, type SourceType } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
+import { useAppStore } from '../stores/appStore'
+import { useStreamController } from '../hooks/useStreamController'
 import { loadTranslation, getVerseText, searchBibleMerged, BUNDLED_TRANSLATIONS } from '../lib/bibleData'
 import { cn } from '../lib/utils'
 
@@ -799,52 +801,88 @@ const DEFAULT_DESTS: Dest[] = [
 ]
 
 function StreamingPanel({ streaming, setStreaming }: { streaming: boolean; setStreaming: (v: boolean) => void }) {
-  const [dests, setDests] = useState<Dest[]>(DEFAULT_DESTS)
-  const enabled = dests.filter(d => d.on).length
+  const destinations    = useAppStore(s => s.destinations)
+  const setDestinations = useAppStore(s => s.setDestinations)
+  const stream = useStreamController()
 
-  const toggle = (i: number) => setDests(ds => ds.map((d, j) => j === i ? { ...d, on: !d.on } : d))
-  const goLive = () => {
-    if (streaming) { setStreaming(false); return }
-    if (enabled === 0) return
-    setStreaming(true)
-  }
+  const enabled = destinations.filter(d => d.enabled).length
+  const live    = stream.state === 'live' || stream.state === 'starting'
+
+  // Keep the page's local flag in step with the real encoder state.
+  useEffect(() => { setStreaming(live) }, [live, setStreaming])
+
+  const toggle = (id: string) => setDestinations(
+    destinations.map(d => d.id === id ? { ...d, enabled: !d.enabled } : d),
+  )
+
+  const goLive = () => { void (live ? stream.stop() : stream.start()) }
+
+  const blocked = stream.encoderAvailable === false
 
   return (
     <Panel
       title="Streaming"
-      right={<span className="text-[10px] text-white/40">{enabled} selected</span>}
+      right={
+        <span className="text-[10px] text-white/40 tabular-nums">
+          {stream.stats ? `${stream.stats.bitrate} · ${stream.stats.speed.toFixed(2)}x` : `${enabled} selected`}
+        </span>
+      }
       className="h-[230px]"
     >
       <div className="flex flex-col h-full p-3 gap-2">
         <div className="flex-1 space-y-1.5 overflow-y-auto">
-          {dests.map((s, i) => (
-            <button
-              key={s.name}
-              onClick={() => toggle(i)}
-              disabled={streaming}
-              className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-colors',
-                s.on ? 'bg-emerald-600/10 border-emerald-500/25' : 'bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]',
-                streaming && 'opacity-70 cursor-not-allowed')}
-            >
-              <span className={cn('w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white', s.color)}>{s.name.charAt(0)}</span>
-              <span className="text-[11px] text-white/70 flex-1 truncate text-left">{s.name}</span>
-              {streaming && s.on
-                ? <span className="flex items-center gap-1 text-[8px] font-bold text-red-400"><Circle size={5} className="fill-red-500 text-red-500 live-dot" /> LIVE</span>
-                : <span className={cn('w-7 h-3.5 rounded-full relative transition-colors', s.on ? 'bg-emerald-500/80' : 'bg-white/15')}>
-                    <span className={cn('absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all', s.on ? 'left-3.5' : 'left-0.5')} />
-                  </span>}
-            </button>
-          ))}
+          {destinations.map((d) => {
+            const configured = Boolean(d.rtmpUrl.trim() && d.streamKey.trim())
+            return (
+              <button
+                key={d.id}
+                onClick={() => toggle(d.id)}
+                disabled={live}
+                title={configured ? d.name : 'No stream key — set one in Settings → Streaming'}
+                className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-colors',
+                  d.enabled ? 'bg-emerald-600/10 border-emerald-500/25' : 'bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]',
+                  live && 'opacity-70 cursor-not-allowed')}
+              >
+                <span className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white bg-white/15">
+                  {d.name.charAt(0)}
+                </span>
+                <span className="text-[11px] text-white/70 flex-1 truncate text-left">{d.name}</span>
+
+                {!configured && (
+                  <span className="text-[8px] font-semibold text-amber-400/80 shrink-0">NO KEY</span>
+                )}
+
+                {live && d.enabled
+                  ? <span className="flex items-center gap-1 text-[8px] font-bold text-red-400"><Circle size={5} className="fill-red-500 text-red-500 live-dot" /> LIVE</span>
+                  : <span className={cn('w-7 h-3.5 rounded-full relative transition-colors shrink-0', d.enabled ? 'bg-emerald-500/80' : 'bg-white/15')}>
+                      <span className={cn('absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all', d.enabled ? 'left-3.5' : 'left-0.5')} />
+                    </span>}
+              </button>
+            )
+          })}
         </div>
+
+        {stream.error && (
+          <p className="text-[10px] leading-snug text-red-400/90 line-clamp-2">{stream.error}</p>
+        )}
+        {blocked && !stream.error && stream.unavailableReason && (
+          <p className="text-[10px] leading-snug text-amber-400/80">
+            {stream.unavailableReason}
+          </p>
+        )}
+
         <button
           onClick={goLive}
-          disabled={!streaming && enabled === 0}
+          disabled={blocked || (!live && enabled === 0) || stream.state === 'stopping'}
           className={cn('w-full py-2 rounded-lg text-[12px] font-bold tracking-wide transition-colors flex items-center justify-center gap-2',
-            streaming ? 'bg-red-600 text-white hover:bg-red-500'
-              : enabled > 0 ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+            live ? 'bg-red-600 text-white hover:bg-red-500'
+              : !blocked && enabled > 0 ? 'bg-emerald-600 text-white hover:bg-emerald-500'
               : 'bg-white/[0.05] text-white/25 cursor-not-allowed')}
         >
-          {streaming ? <><Circle size={9} className="fill-white" /> Stop Stream</> : <><Radio size={13} /> Go Live{enabled > 0 ? ` · ${enabled}` : ''}</>}
+          {stream.state === 'starting' ? 'Connecting…'
+            : stream.state === 'stopping' ? 'Stopping…'
+            : live ? <><Circle size={9} className="fill-white" /> Stop Stream</>
+            : <><Radio size={13} /> Go Live{enabled > 0 ? ` · ${enabled}` : ''}</>}
         </button>
       </div>
     </Panel>

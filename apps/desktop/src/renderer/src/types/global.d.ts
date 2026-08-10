@@ -33,6 +33,13 @@ export interface GloryCastAPI {
   system: {
     stats: () => Promise<GloryCastSystemStats>
   }
+  encoder: {
+    available: () => Promise<boolean>
+    state: () => Promise<string>
+    start: (config: unknown) => Promise<{ ok: true } | { ok: false; error: string }>
+    stop: () => Promise<{ ok: true }>
+    chunk: (data: ArrayBuffer) => void
+  }
   shell: {
     openPath: (path: string) => Promise<string>
     openExternal: (url: string) => Promise<void>

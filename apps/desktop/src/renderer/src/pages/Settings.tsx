@@ -9,6 +9,7 @@ import { cn } from '../lib/utils'
 import { useMediaEngine } from '../hooks/useMediaEngine'
 import type { AppearanceConfig } from '../hooks/useMediaEngine'
 import { WorkspacePicker } from '../components/settings/WorkspacePicker'
+import { useAppStore } from '../stores/appStore'
 
 type SettingsSection = 'general' | 'audio-video' | 'streaming' | 'ai' | 'bible' | 'appearance' | 'security'
 
@@ -443,31 +444,97 @@ function AISettings() {
 
 // ─── Streaming settings ───────────────────────────────────────────────────────
 
+/**
+ * Per-destination streaming setup.
+ *
+ * Every platform issues its own stream key, so there is no such thing as one
+ * app-wide key once you multi-stream. Each destination owns its URL and key,
+ * and both persist through appStore.
+ */
 function StreamingSettings() {
-  const [rtmpUrl,    setRtmpUrl]    = useState('rtmp://a.rtmp.youtube.com/live2')
-  const [streamKey,  setStreamKey]  = useState('')
-  const [bitrate,    setBitrate]    = useState('6000')
-  const [resolution, setResolution] = useState('1920x1080')
+  const destinations    = useAppStore(s => s.destinations)
+  const setDestinations = useAppStore(s => s.setDestinations)
+
+  const patch = (id: string, changes: Partial<(typeof destinations)[number]>) =>
+    setDestinations(destinations.map(d => (d.id === id ? { ...d, ...changes } : d)))
 
   return (
     <div>
-      <SectionHeader title="Streaming" description="Configure RTMP destinations and encoder settings" />
-      <div className="space-y-0">
-        <SettingRow label="Primary RTMP URL" description="Main streaming destination">
-          <Input value={rtmpUrl} onChange={setRtmpUrl} />
-        </SettingRow>
-        <SettingRow label="Stream Key" description="Keep this secret">
-          <Input value={streamKey} onChange={setStreamKey} type="password" placeholder="Stream key…" />
-        </SettingRow>
-        <SettingRow label="Video Bitrate (kbps)" description="Higher = better quality, more bandwidth">
-          <Input value={bitrate} onChange={setBitrate} />
-        </SettingRow>
-        <SettingRow label="Output Resolution" description="Streaming output resolution">
-          <select value={resolution} onChange={e => setResolution(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none">
-            {['1920x1080','1280x720','854x480','640x360'].map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </SettingRow>
+      <SectionHeader
+        title="Streaming"
+        description="Each platform issues its own stream key. A destination without one cannot go live."
+      />
+
+      <div className="space-y-3">
+        {destinations.map((d) => {
+          const configured = Boolean(d.rtmpUrl.trim() && d.streamKey.trim())
+          return (
+            <div
+              key={d.id}
+              className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5"
+            >
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/80">
+                  {d.name.charAt(0)}
+                </span>
+                <span className="text-[13px] font-semibold text-white/85 flex-1">{d.name}</span>
+
+                <span className={cn(
+                  'text-[9.5px] font-bold tracking-wider px-1.5 py-0.5 rounded',
+                  configured
+                    ? 'text-emerald-400 bg-emerald-500/12'
+                    : 'text-amber-400 bg-amber-500/12',
+                )}>
+                  {configured ? 'READY' : 'NO KEY'}
+                </span>
+
+                <button
+                  onClick={() => patch(d.id, { enabled: !d.enabled })}
+                  disabled={!configured}
+                  title={configured ? 'Enable for streaming' : 'Add a stream key first'}
+                  className={cn(
+                    'w-9 h-5 rounded-full relative transition-colors shrink-0',
+                    !configured ? 'bg-white/10 cursor-not-allowed'
+                      : d.enabled ? 'bg-emerald-500/80' : 'bg-white/15',
+                  )}
+                >
+                  <span className={cn(
+                    'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all',
+                    d.enabled && configured ? 'left-[18px]' : 'left-0.5',
+                  )} />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block">
+                  <span className="text-[10.5px] text-white/40">Ingest URL</span>
+                  <input
+                    value={d.rtmpUrl}
+                    onChange={e => patch(d.id, { rtmpUrl: e.target.value })}
+                    placeholder="rtmp://…"
+                    spellCheck={false}
+                    className="mt-1 w-full h-8 px-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[12px] font-mono text-white/80 outline-none focus:border-purple-500/50"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[10.5px] text-white/40">
+                    Stream key <span className="text-white/25">· kept on this machine</span>
+                  </span>
+                  <input
+                    type="password"
+                    value={d.streamKey}
+                    onChange={e => patch(d.id, { streamKey: e.target.value })}
+                    placeholder="Paste the key from the platform…"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="mt-1 w-full h-8 px-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[12px] font-mono text-white/80 outline-none focus:border-purple-500/50"
+                  />
+                </label>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

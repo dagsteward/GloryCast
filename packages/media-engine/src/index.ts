@@ -10,6 +10,13 @@ export {
 } from './Compositor.js'
 
 export {
+  AudioMixer,
+  MIN_DB,
+  type ChannelLevels,
+  type ChannelState,
+} from './AudioMixer.js'
+
+export {
   TextRenderer,
   DEFAULT_TEXT_STYLE,
   type Legibility,
