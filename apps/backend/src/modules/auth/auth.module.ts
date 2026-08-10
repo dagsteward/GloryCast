@@ -20,7 +20,19 @@ import { GoogleStrategy }  from './strategies/google.strategy'
     }),
   ],
   controllers: [AuthController],
-  providers:   [AuthService, JwtStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    // Google sign-in is optional. passport-google-oauth20 throws
+    // "OAuth2Strategy requires a clientID option" from its constructor when
+    // the credentials are absent, which takes the whole API down at boot —
+    // a deployment without Google configured would never start. Registering
+    // it conditionally means the rest of the product runs, and email/password
+    // auth is unaffected.
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [GoogleStrategy]
+      : []),
+  ],
   exports:     [AuthService, JwtModule],
 })
 export class AuthModule {}

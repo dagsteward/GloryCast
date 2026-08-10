@@ -4,6 +4,7 @@ import {
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger'
 import { ConfigService } from '@nestjs/config'
 import { createHmac, timingSafeEqual } from 'crypto'
+import type { RawBodyRequest } from '@nestjs/common'
 import type { FastifyRequest } from 'fastify'
 import { LicensingService } from './licensing.service'
 import { Public } from '../../common/decorators/public.decorator'
@@ -91,7 +92,7 @@ export class PaddleWebhookController {
   @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Paddle billing webhook' })
   async handle(
-    @Req() request: FastifyRequest & { rawBody?: string | Buffer },
+    @Req() request: RawBodyRequest<FastifyRequest>,
     @Headers('paddle-signature') signature?: string,
   ) {
     const raw = request.rawBody

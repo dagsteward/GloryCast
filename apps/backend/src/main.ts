@@ -17,27 +17,16 @@ async function bootstrap() {
     trustProxy: true,
   })
 
-  // Payment webhooks are HMAC-signed over the EXACT bytes received. Fastify
-  // parses JSON and discards the original text, and re-serialising the parsed
-  // object produces different bytes — key order and whitespace both differ —
-  // so the signature could never match. Retain the raw body for those routes.
-  adapter.getInstance().addContentTypeParser(
-    'application/json',
-    { parseAs: 'string' },
-    (request: any, body: string, done: (err: Error | null, result?: unknown) => void) => {
-      request.rawBody = body
-      try {
-        done(null, body === '' ? {} : JSON.parse(body))
-      } catch (err) {
-        done(err as Error)
-      }
-    },
-  )
-
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     adapter,
-    { bufferLogs: true },
+    // Payment webhooks are HMAC-signed over the EXACT bytes received. Fastify
+    // parses JSON and discards the original text, and re-serialising the
+    // parsed object produces different bytes — key order and whitespace both
+    // differ — so a signature could never match. Nest's rawBody option keeps
+    // the original buffer on request.rawBody without fighting Fastify's own
+    // parser registration.
+    { bufferLogs: true, rawBody: true },
   )
 
   const config = app.get(ConfigService)
