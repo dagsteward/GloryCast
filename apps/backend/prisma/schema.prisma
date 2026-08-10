@@ -8,7 +8,17 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+
+  // Runtime traffic goes through the connection pooler (Supabase/PgBouncer,
+  // port 6543). Postgres allows only a few dozen direct connections, and a
+  // container that opens one per request exhausts them under Sunday load.
+  url = env("DATABASE_URL")
+
+  // Migrations MUST use a direct connection (port 5432). PgBouncer runs in
+  // transaction pooling mode, which cannot execute the session-level
+  // statements and advisory locks migrations rely on — `migrate deploy`
+  // against the pooler fails or, worse, half-applies.
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────

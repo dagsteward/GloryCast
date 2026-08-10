@@ -11,6 +11,8 @@ export default () => ({
 
   database: {
     url: process.env.DATABASE_URL!,
+    // Migrations only; see prisma/schema.prisma for why it must be direct.
+    directUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
   },
 
   redis: {
