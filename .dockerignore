@@ -1,0 +1,58 @@
+# Build context sent to the Docker daemon (and uploaded by Railway).
+#
+# Without this the context includes every node_modules in the monorepo plus
+# bundled Bible assets — hundreds of megabytes, uploaded on every deploy. The
+# image installs its own dependencies from the lockfile, so none of it is
+# wanted, and a host node_modules can carry platform-specific binaries that
+# break inside a Linux container.
+
+# Dependencies — reinstalled inside the image from package-lock.json
+node_modules
+**/node_modules
+
+# Build output — rebuilt inside the image
+dist
+**/dist
+build
+**/build
+release
+**/release
+.next
+out
+*.tsbuildinfo
+.turbo
+**/.turbo
+apps/desktop/build-tmp
+
+# Secrets — must never enter an image layer
+.env
+.env.*
+!.env.example
+
+# Desktop-only assets the API has no use for
+apps/desktop
+apps/mobile
+packages/bible-engine/Bibles
+packages/bible-engine/Backgrounds
+packages/bible-engine/NDI
+.bible-src
+
+# Local tooling and history
+.git
+.github
+.claude
+.vscode
+.idea
+*.log
+npm-debug.log*
+coverage
+.DS_Store
+Thumbs.db
+
+# Docs and scratch files
+docs
+*.md
+!README.md
+prisma-test.mjs
+run-backend.mjs
+swagger2.json
