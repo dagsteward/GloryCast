@@ -8,6 +8,37 @@
  */
 import { create } from 'zustand'
 
+/**
+ * Chromium exposes the SAME physical microphone/camera as multiple
+ * MediaDeviceInfo entries — a synthetic "default" alias, a synthetic
+ * "communications" alias (Windows only), and the actual hardware device —
+ * all sharing one groupId. Left unfiltered, every input strip in the mixer
+ * (and every "Add Source → Camera" picker entry) shows the same physical
+ * device two or three times, each truncated to a near-identical label and
+ * crammed together — which reads as broken/overlapping text, not as three
+ * legitimately different microphones.
+ */
+function dedupeDevices(devices: MediaDeviceInfo[]): MediaDeviceInfo[] {
+  const isSynthetic = (d: MediaDeviceInfo) =>
+    d.deviceId === 'default' || d.deviceId === 'communications'
+
+  // Real hardware entries first, so when a group collides we keep the one
+  // with the actual product name rather than the generic "Default" alias.
+  const ordered = [...devices].sort(
+    (a, b) => Number(isSynthetic(a)) - Number(isSynthetic(b)),
+  )
+
+  const seen = new Set<string>()
+  const out: MediaDeviceInfo[] = []
+  for (const d of ordered) {
+    const key = d.groupId || d.deviceId
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(d)
+  }
+  return out
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type SourceType =
@@ -294,8 +325,8 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices()
         set({
-          cameras:     devices.filter(d => d.kind === 'videoinput'),
-          microphones: devices.filter(d => d.kind === 'audioinput'),
+          cameras:     dedupeDevices(devices.filter(d => d.kind === 'videoinput')),
+          microphones: dedupeDevices(devices.filter(d => d.kind === 'audioinput')),
         })
       } catch (e) {
         console.warn('[MediaEngine] enumerateDevices:', e)
