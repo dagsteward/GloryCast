@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Resend } from 'resend'
-import { formatKey } from '@glorycast/licensing'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mail — transactional email, starting with licence delivery.
@@ -15,6 +14,19 @@ import { formatKey } from '@glorycast/licensing'
 // A missing API key degrades to logging instead of throwing, so a mail outage
 // never takes down the licence server that issues the key in the first place.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * "GC7K2M9PQR4XZ3TNVW8H" -> "GC7K2-M9PQR-4XZ3T-NVW8H".
+ *
+ * Duplicated from formatKey() in packages/licensing rather than imported: the
+ * backend image deliberately never depends on that package (licensing.service
+ * reimplements canonicalPayload for the same reason), so this stays a self-
+ * contained one-liner instead of pulling a workspace package into the Docker
+ * build graph for a single formatting helper.
+ */
+function formatKey(key: string): string {
+  return key.replace(/[^a-z0-9]/gi, '').toUpperCase().replace(/(.{5})/g, '$1-').replace(/-$/, '')
+}
 
 @Injectable()
 export class MailService {

@@ -364,4 +364,94 @@ export class LicensingService {
       },
     })
   }
+
+  // ── Admin console ────────────────────────────────────────────────────────
+
+  /** Search/paginate licences for the admin console. */
+  async list(params: {
+    query?: string
+    status?: LicenseStatus
+    page?: number
+    limit?: number
+  }) {
+    const page = Math.max(1, params.page ?? 1)
+    const limit = Math.min(100, Math.max(1, params.limit ?? 25))
+    const query = params.query?.trim()
+
+    const where = {
+      ...(params.status ? { status: params.status } : {}),
+      ...(query
+        ? {
+            OR: [
+              { key: { contains: LicensingService.normaliseKey(query) } },
+              { organisation: { contains: query, mode: 'insensitive' as const } },
+              { email: { contains: query, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.license.findMany({
+        where,
+        include: { _count: { select: { devices: { where: { releasedAt: null } } } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.license.count({ where }),
+    ])
+
+    return { items, total, page, limit }
+  }
+
+  /**
+   * Admin-initiated status change (revoke, manual cancel, manual reactivate).
+   * Distinct from setStatus() above, which is keyed by the payment provider's
+   * subscription id and driven by webhooks — this is keyed by the customer-
+   * facing licence key, for a human acting through the console.
+   */
+  async setStatusByKey(key: string, status: LicenseStatus, note?: string): Promise<void> {
+    const license = await this.prisma.license.findUnique({
+      where: { key: LicensingService.normaliseKey(key) },
+    })
+    if (!license) throw new NotFoundException('That licence key was not recognised.')
+
+    await this.prisma.license.update({ where: { id: license.id }, data: { status } })
+    await this.record(license.id, `admin_${status.toLowerCase()}`, note)
+  }
+
+  /** Platform-wide counts for the admin console's overview screen. */
+  async overview() {
+    const [byStatus, totalSeatsResult, expiringSoon, recentEvents] = await Promise.all([
+      this.prisma.license.groupBy({ by: ['status'], _count: true }),
+      this.prisma.license.aggregate({
+        where: { status: LicenseStatus.ACTIVE },
+        _sum: { seats: true },
+      }),
+      this.prisma.license.count({
+        where: {
+          status: LicenseStatus.ACTIVE,
+          expiresAt: { lte: new Date(Date.now() + 30 * DAY_MS), gte: new Date() },
+        },
+      }),
+      this.prisma.licenseEvent.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+        include: { license: { select: { key: true, organisation: true } } },
+      }),
+    ])
+
+    const counts = Object.fromEntries(
+      Object.values(LicenseStatus).map(s => [s, 0]),
+    ) as Record<LicenseStatus, number>
+    for (const row of byStatus) counts[row.status] = row._count
+
+    return {
+      counts,
+      totalActiveSeats: totalSeatsResult._sum.seats ?? 0,
+      expiringSoon,
+      recentEvents,
+    }
+  }
 }

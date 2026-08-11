@@ -17,7 +17,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { PrismaClient, Role } from '@prisma/client'
-import { hash } from 'bcryptjs'
+// bcryptjs is CommonJS; under Node's ESM loader only the default export is
+// available; { hash } as a named import fails at runtime, not at lint time.
+import bcrypt from 'bcryptjs'
+const { hash } = bcrypt
 
 const [, , email, password] = process.argv
 

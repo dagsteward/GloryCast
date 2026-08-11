@@ -5,6 +5,8 @@ import { ConfigService } from '@nestjs/config'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import fastifyHelmet from '@fastify/helmet'
 import fastifyCompress from '@fastify/compress'
+import fastifyStatic from '@fastify/static'
+import { join } from 'path'
 import { AppModule } from './app.module'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
 import { TransformInterceptor } from './common/interceptors/transform.interceptor'
@@ -41,6 +43,17 @@ async function bootstrap() {
     contentSecurityPolicy: false, // handled at nginx level
   })
   await app.register(fastifyCompress as any)
+
+  // Business console — a small static SPA served alongside the API, under a
+  // path outside app.setGlobalPrefix() so it is reachable at /admin rather
+  // than /api/v1/admin. It authenticates against the same /auth/login and
+  // /admin/* endpoints as any other client; nothing here bypasses the JWT
+  // guards on those routes.
+  await app.register(fastifyStatic as any, {
+    root: join(__dirname, '..', 'public', 'admin'),
+    prefix: '/admin/',
+    decorateReply: false,
+  })
 
   app.enableCors({
     origin: origins,

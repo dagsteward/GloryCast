@@ -45,6 +45,7 @@ COPY --from=build /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=build /app/apps/backend/package.json ./apps/backend/
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
 COPY --from=build /app/apps/backend/scripts ./apps/backend/scripts
+COPY --from=build /app/apps/backend/public ./apps/backend/public
 
 WORKDIR /app/apps/backend
 

@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>GloryCast — Business Console</title>
+<style>
+  :root {
+    --bg: #07070c; --chrome: #0d0d15; --surface: #12121c; --surface-2: #181826;
+    --border: rgba(255,255,255,0.08); --border-bright: rgba(255,255,255,0.14);
+    --text: rgba(255,255,255,0.92); --text-dim: rgba(255,255,255,0.55); --text-faint: rgba(255,255,255,0.32);
+    --purple: #7c3aed; --purple-bright: #a855f7;
+    --green: #10b981; --amber: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #app { display: none; min-height: 100vh; }
+  #app.ready { display: flex; }
+
+  /* ── Login ── */
+  #login { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  #login.hidden { display: none; }
+  .login-card { width: 340px; padding: 32px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+  .brand .mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg,#a855f7,#7c3aed,#f97316); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#fff; }
+  .brand .name { font-size: 16px; font-weight: 800; }
+  .brand .sub { font-size: 10px; color: var(--text-faint); letter-spacing: .08em; margin-top: 1px; }
+  label { display: block; font-size: 11px; color: var(--text-dim); margin: 14px 0 5px; }
+  input { width: 100%; height: 36px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); font-size: 13px; outline: none; }
+  input:focus { border-color: var(--purple); }
+  button { cursor: pointer; font-family: inherit; }
+  .btn { height: 36px; border-radius: 9px; border: none; background: var(--purple); color: #fff; font-weight: 600; font-size: 12.5px; }
+  .btn:hover { background: var(--purple-bright); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-ghost { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.1); }
+  .btn-danger { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+  .btn-danger:hover { background: rgba(239,68,68,0.25); }
+  .error-text { color: #fca5a5; font-size: 11.5px; margin-top: 10px; min-height: 14px; }
+
+  /* ── Shell ── */
+  #sidebar { width: 200px; shrink: 0; background: var(--chrome); border-right: 1px solid var(--border); padding: 16px 10px; display: flex; flex-direction: column; }
+  #sidebar .brand { padding: 0 6px 16px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .nav-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 10px; border-radius: 8px; color: var(--text-dim); font-size: 12.5px; font-weight: 500; cursor: pointer; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .nav-item.active { background: rgba(124,58,237,0.18); color: #fff; }
+  #sidebar .spacer { flex: 1; }
+  #main { flex: 1; overflow-y: auto; padding: 24px 28px; }
+  .page { display: none; }
+  .page.active { display: block; }
+  h1 { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+  .page-sub { color: var(--text-dim); font-size: 12px; margin: 0 0 20px; }
+
+  /* ── Cards / grid ── */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .stat-card .n { font-size: 24px; font-weight: 800; line-height: 1; }
+  .stat-card .l { font-size: 10.5px; color: var(--text-faint); margin-top: 6px; text-transform: uppercase; letter-spacing: .06em; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th { text-align: left; font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  tbody td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .mono { font-family: 'SF Mono', Consolas, monospace; font-size: 11.5px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: .03em; }
+  .b-ACTIVE { background: rgba(16,185,129,0.15); color: #34d399; }
+  .b-PAST_DUE { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  .b-CANCELLED { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+  .b-EXPIRED { background: rgba(255,255,255,0.08); color: var(--text-faint); }
+  .b-REVOKED { background: rgba(239,68,68,0.15); color: #f87171; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; }
+  .toolbar input, .toolbar select { height: 32px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 0 10px; }
+  .toolbar .grow { flex: 1; }
+  .small-btn { height: 26px; padding: 0 10px; border-radius: 7px; font-size: 11px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+  .panel h3 { margin: 0 0 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-backdrop.open { display: flex; }
+  .modal { width: 380px; background: var(--surface-2); border: 1px solid var(--border-bright); border-radius: 14px; padding: 20px; }
+  .modal h3 { margin: 0 0 14px; font-size: 14px; }
+  .modal .row { display: flex; gap: 8px; margin-top: 16px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface-2); border: 1px solid var(--border-bright); border-radius: 10px; padding: 11px 16px; font-size: 12.5px; z-index: 200; opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.err { border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+  .empty { padding: 40px 0; text-align: center; color: var(--text-faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+  <div id="login">
+    <div class="login-card">
+      <div class="brand">
+        <div class="mark">G</div>
+        <div><div class="name">GloryCast</div><div class="sub">BUSINESS CONSOLE</div></div>
+      </div>
+      <label>Email</label>
+      <input id="login-email" type="email" autocomplete="username" />
+      <label>Password</label>
+      <input id="login-pass" type="password" autocomplete="current-password" />
+      <button class="btn" id="login-btn" style="width:100%;margin-top:18px;">Sign in</button>
+      <div class="error-text" id="login-error"></div>
+    </div>
+  </div>
+
+  <div id="app">
+    <div id="sidebar">
+      <div class="brand">
+        <div class="mark">G</div>
+        <div><div class="name">GloryCast</div><div class="sub">CONSOLE</div></div>
+      </div>
+      <button class="nav-item active" data-page="overview">Overview</button>
+      <button class="nav-item" data-page="licences">Licences</button>
+      <button class="nav-item" data-page="churches">Churches</button>
+      <div class="spacer"></div>
+      <div style="padding:8px 10px;font-size:11px;color:var(--text-faint);" id="whoami"></div>
+      <button class="nav-item" id="logout-btn">Sign out</button>
+    </div>
+
+    <div id="main">
+
+      <!-- Overview -->
+      <section class="page active" id="page-overview">
+        <h1>Overview</h1>
+        <p class="page-sub">Platform-wide licence health.</p>
+        <div class="stat-grid" id="overview-stats"></div>
+        <div class="panel">
+          <h3>Recent activity</h3>
+          <table><thead><tr><th>Event</th><th>Licence</th><th>Detail</th><th>When</th></tr></thead>
+          <tbody id="overview-events"></tbody></table>
+        </div>
+      </section>
+
+      <!-- Licences -->
+      <section class="page" id="page-licences">
+        <h1>Licences</h1>
+        <p class="page-sub">Search, issue, resend, and manage status.</p>
+        <div class="toolbar">
+          <input id="lic-search" class="grow" placeholder="Search by key, organisation, or email…" />
+          <select id="lic-status">
+            <option value="">All statuses</option>
+            <option>ACTIVE</option><option>PAST_DUE</option><option>CANCELLED</option>
+            <option>EXPIRED</option><option>REVOKED</option>
+          </select>
+          <button class="btn small-btn" id="lic-issue-btn">+ Issue licence</button>
+        </div>
+        <table>
+          <thead><tr><th>Organisation</th><th>Key</th><th>Status</th><th>Seats</th><th>Renews</th><th></th></tr></thead>
+          <tbody id="lic-rows"></tbody>
+        </table>
+        <div class="empty" id="lic-empty" style="display:none;">No licences match.</div>
+      </section>
+
+      <!-- Churches -->
+      <section class="page" id="page-churches">
+        <h1>Churches</h1>
+        <p class="page-sub">Every church registered on the platform.</p>
+        <table>
+          <thead><tr><th>Name</th><th>Slug</th><th>Tier</th><th>Members</th><th>Streams</th><th>Created</th></tr></thead>
+          <tbody id="church-rows"></tbody>
+        </table>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="issue-modal">
+    <div class="modal">
+      <h3>Issue a licence</h3>
+      <label>Organisation</label>
+      <input id="issue-org" placeholder="Grace Community Church" />
+      <label>Email</label>
+      <input id="issue-email" type="email" placeholder="admin@church.org" />
+      <label>Seats</label>
+      <input id="issue-seats" type="number" value="2" min="1" max="100" />
+      <div class="row">
+        <button class="btn-ghost btn" style="flex:1;" id="issue-cancel">Cancel</button>
+        <button class="btn" style="flex:1;" id="issue-confirm">Issue &amp; email</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="status-modal">
+    <div class="modal">
+      <h3 id="status-title">Change status</h3>
+      <label>Note (kept on the audit trail)</label>
+      <input id="status-note" placeholder="Optional" />
+      <div class="row">
+        <button class="btn-ghost btn" style="flex:1;" id="status-cancel">Cancel</button>
+        <button class="btn btn-danger" style="flex:1;" id="status-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const API = location.origin + '/api/v1';
+let token = localStorage.getItem('gc_admin_token') || '';
+let pendingStatusKey = null, pendingStatusValue = null;
+
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  if (res.status === 401) { signOut(); throw new Error('Session expired'); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || ('Request failed (' + res.status + ')'));
+  return body.data !== undefined ? body.data : body;
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}) : '—'; }
+function fmtDateTime(d) { return d ? new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'; }
+
+// ── Auth ──
+async function signIn() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  btn.disabled = true;
+  try {
+    const res = await fetch(API + '/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || 'Sign-in failed');
+    const data = body.data || body;
+    if (!data.accessToken) throw new Error('Unexpected response from server');
+    token = data.accessToken;
+    localStorage.setItem('gc_admin_token', token);
+    await boot();
+  } catch (e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function signOut() {
+  token = '';
+  localStorage.removeItem('gc_admin_token');
+  document.getElementById('app').classList.remove('ready');
+  document.getElementById('login').classList.remove('hidden');
+}
+
+// ── Nav ──
+document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item[data-page]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const page = document.getElementById('page-' + btn.dataset.page);
+    page.classList.add('active');
+    if (btn.dataset.page === 'overview') loadOverview();
+    if (btn.dataset.page === 'licences') loadLicences();
+    if (btn.dataset.page === 'churches') loadChurches();
+  });
+});
+
+// ── Overview ──
+const STATUS_LABELS = { ACTIVE:'Active', PAST_DUE:'Past due', CANCELLED:'Cancelled', EXPIRED:'Expired', REVOKED:'Revoked' };
+
+async function loadOverview() {
+  try {
+    const d = await api('/admin/overview');
+    const grid = document.getElementById('overview-stats');
+    const cards = [
+      { n: d.counts.ACTIVE ?? 0, l: 'Active licences' },
+      { n: d.totalActiveSeats ?? 0, l: 'Active seats' },
+      { n: d.expiringSoon ?? 0, l: 'Renewing in 30 days' },
+      { n: d.counts.PAST_DUE ?? 0, l: 'Past due' },
+      { n: d.counts.CANCELLED ?? 0, l: 'Cancelled' },
+      { n: d.counts.REVOKED ?? 0, l: 'Revoked' },
+    ];
+    grid.innerHTML = cards.map(c => '<div class="stat-card"><div class="n">'+c.n+'</div><div class="l">'+c.l+'</div></div>').join('');
+
+    const rows = document.getElementById('overview-events');
+    rows.innerHTML = (d.recentEvents || []).map(e =>
+      '<tr><td>'+esc(e.type)+'</td><td class="mono">'+esc(e.license ? e.license.organisation : '—')+'</td>' +
+      '<td>'+esc(e.detail||'')+'</td><td>'+fmtDateTime(e.createdAt)+'</td></tr>'
+    ).join('') || '<tr><td colspan="4" class="empty">No activity yet.</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+
+// ── Licences ──
+let licSearchTimer = null;
+document.getElementById('lic-search').addEventListener('input', () => {
+  clearTimeout(licSearchTimer);
+  licSearchTimer = setTimeout(loadLicences, 300);
+});
+document.getElementById('lic-status').addEventListener('change', loadLicences);
+
+async function loadLicences() {
+  const q = document.getElementById('lic-search').value.trim();
+  const status = document.getElementById('lic-status').value;
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  try {
+    const d = await api('/admin/licences?' + params.toString());
+    const rows = document.getElementById('lic-rows');
+    const items = d.items || [];
+    document.getElementById('lic-empty').style.display = items.length ? 'none' : 'block';
+    rows.innerHTML = items.map(l => {
+      const devices = l._count ? l._count.devices : 0;
+      return '<tr>' +
+        '<td>'+esc(l.organisation)+'<div style="color:var(--text-faint);font-size:11px;">'+esc(l.email)+'</div></td>' +
+        '<td class="mono">'+esc(l.key)+'</td>' +
+        '<td><span class="badge b-'+l.status+'">'+STATUS_LABELS[l.status]+'</span></td>' +
+        '<td>'+devices+' / '+l.seats+'</td>' +
+        '<td>'+fmtDate(l.expiresAt)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' +
+          '<button class="btn-ghost btn small-btn" data-resend="'+l.key+'">Resend</button> ' +
+          (l.status === 'REVOKED'
+            ? '<button class="btn-ghost btn small-btn" data-status="'+l.key+'" data-value="ACTIVE">Reactivate</button>'
+            : '<button class="btn-danger btn small-btn" data-status="'+l.key+'" data-value="REVOKED">Revoke</button>') +
+        '</td></tr>';
+    }).join('');
+
+    rows.querySelectorAll('[data-resend]').forEach(b => b.addEventListener('click', () => resendLicence(b.dataset.resend)));
+    rows.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', () => openStatusModal(b.dataset.status, b.dataset.value)));
+  } catch (e) { toast(e.message, true); }
+}
+
+async function resendLicence(key) {
+  try {
+    const d = await api('/licence/' + encodeURIComponent(key) + '/resend', { method: 'POST' });
+    toast(d.sent ? 'Licence email resent.' : 'Email is not configured — nothing was sent.', !d.sent);
+  } catch (e) { toast(e.message, true); }
+}
+
+function openStatusModal(key, value) {
+  pendingStatusKey = key; pendingStatusValue = value;
+  document.getElementById('status-title').textContent =
+    (value === 'REVOKED' ? 'Revoke ' : 'Reactivate ') + key;
+  document.getElementById('status-note').value = '';
+  document.getElementById('status-modal').classList.add('open');
+}
+document.getElementById('status-cancel').addEventListener('click', () => document.getElementById('status-modal').classList.remove('open'));
+document.getElementById('status-confirm').addEventListener('click', async () => {
+  try {
+    await api('/admin/licences/' + encodeURIComponent(pendingStatusKey) + '/status', {
+      method: 'POST',
+      body: JSON.stringify({ status: pendingStatusValue, note: document.getElementById('status-note').value || undefined }),
+    });
+    document.getElementById('status-modal').classList.remove('open');
+    toast('Status updated.');
+    loadLicences();
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('lic-issue-btn').addEventListener('click', () => {
+  document.getElementById('issue-org').value = '';
+  document.getElementById('issue-email').value = '';
+  document.getElementById('issue-seats').value = '2';
+  document.getElementById('issue-modal').classList.add('open');
+});
+document.getElementById('issue-cancel').addEventListener('click', () => document.getElementById('issue-modal').classList.remove('open'));
+document.getElementById('issue-confirm').addEventListener('click', async () => {
+  const organisation = document.getElementById('issue-org').value.trim();
+  const email = document.getElementById('issue-email').value.trim();
+  const seats = Number(document.getElementById('issue-seats').value) || 2;
+  if (!organisation || !email) { toast('Organisation and email are required.', true); return; }
+  try {
+    await api('/licence/issue', { method: 'POST', body: JSON.stringify({ organisation, email, seats }) });
+    document.getElementById('issue-modal').classList.remove('open');
+    toast('Licence issued and emailed.');
+    loadLicences();
+  } catch (e) { toast(e.message, true); }
+});
+
+// ── Churches ──
+async function loadChurches() {
+  try {
+    const items = await api('/admin/churches');
+    document.getElementById('church-rows').innerHTML = items.map(c =>
+      '<tr><td>'+esc(c.name)+'</td><td class="mono">'+esc(c.slug)+'</td>' +
+      '<td>'+esc(c.subscriptionTier)+'</td><td>'+c._count.users+'</td>' +
+      '<td>'+c._count.streams+'</td><td>'+fmtDate(c.createdAt)+'</td></tr>'
+    ).join('') || '<tr><td colspan="6" class="empty">No churches yet.</td></tr>';
+  } catch (e) { toast(e.message, true); }
+}
+
+// ── Boot ──
+document.getElementById('login-btn').addEventListener('click', signIn);
+document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+document.getElementById('logout-btn').addEventListener('click', signOut);
+
+async function boot() {
+  try {
+    const me = await api('/auth/me');
+    document.getElementById('whoami').textContent = me.email || '';
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('app').classList.add('ready');
+    loadOverview();
+  } catch (e) {
+    signOut();
+  }
+}
+
+if (token) boot(); else document.getElementById('login').classList.remove('hidden');
+</script>
+</body>
+</html>
