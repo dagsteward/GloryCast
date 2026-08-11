@@ -218,7 +218,11 @@ async function api(path, opts) {
   const res = await fetch(API + path, {
     ...opts,
     headers: {
-      'Content-Type': 'application/json',
+      // Only set Content-Type when there IS a body. Fastify's JSON parser
+      // rejects an empty body sent with this header ("Body cannot be empty
+      // when content-type is set to 'application/json'") — every no-payload
+      // POST here (resend, revoke without a note) hit exactly that.
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: 'Bearer ' + token } : {}),
       ...(opts.headers || {}),
     },
