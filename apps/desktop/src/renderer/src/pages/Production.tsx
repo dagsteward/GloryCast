@@ -91,7 +91,7 @@ function SourceVideo({ id, type, label, className }: { id: string | null; type?:
       {!hasStream && (
         <div className={cn('absolute inset-0 bg-gradient-to-br flex items-center justify-center', FALLBACK_GRADIENTS[type ?? 'default'] ?? FALLBACK_GRADIENTS.default)}>
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,255,255,0.1),transparent_60%)]" />
-          {label && <span className="relative text-[11px] text-white/40">{label}</span>}
+          {label && <span className="relative text-[11px] text-white/65">{label}</span>}
         </div>
       )}
     </div>
@@ -449,7 +449,12 @@ function SourcesPanel() {
             onClick={() => setTab(i)}
             className={cn(
               'px-2.5 py-1 rounded-md text-[10.5px] font-semibold tracking-wide whitespace-nowrap transition-colors',
-              tab === i ? 'text-purple-300 bg-purple-600/15' : 'text-white/40 hover:text-white/70',
+              // white/40 on this panel's near-black background sits around a
+              // 2.5:1 contrast ratio — well under WCAG AA's 4.5:1 floor for
+              // normal text, which is exactly why these tabs (ALL SOURCES,
+              // VIDEO, MEDIA…) were unreadable until clicked into their
+              // higher-contrast active state.
+              tab === i ? 'text-purple-300 bg-purple-600/15' : 'text-white/65 hover:text-white/90',
             )}
           >{c.label}</button>
         ))}
@@ -745,9 +750,9 @@ function AiAssistant({ onLive, onStage, liveRef, stageRef }: {
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 space-y-2">
           {results.length > 0 && (
             <>
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-white/35">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-white/55">
                 <span className="flex items-center gap-1"><BookOpen size={10} className="text-purple-300" /> Results</span>
-                <button onClick={() => { setResults([]); setQuery('') }} className="text-white/30 hover:text-white/60 normal-case">clear</button>
+                <button onClick={() => { setResults([]); setQuery('') }} className="text-white/55 hover:text-white/80 normal-case">clear</button>
               </div>
               {results.map((g, i) => <Card key={`r${i}`} g={g} />)}
             </>
@@ -755,7 +760,7 @@ function AiAssistant({ onLive, onStage, liveRef, stageRef }: {
 
           {scriptures.length > 0 && (
             <>
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-white/35 pt-1">
+              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-white/55 pt-1">
                 <Sparkles size={10} className="text-emerald-400" /> Voice-detected
               </div>
               {scriptures.map(d => <Card key={d.id} g={{ ref: d.reference, text: d.text, translation: d.subtitle }} conf={d.confidence} />)}
@@ -794,7 +799,7 @@ function StagePanel({ graphic, clearGraphic }: { graphic: Graphic | null; clearG
       <div className="flex items-center gap-2 px-3 h-9 border-b border-white/[0.05]">
         <MonitorSmartphone size={15} className="text-cyan-400" />
         <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Stage Display</span>
-        <span className="text-[10px] text-white/35">(In-House)</span>
+        <span className="text-[10px] text-white/55">(In-House)</span>
         {graphic && <button onClick={clearGraphic} title="Clear stage" className="ml-auto"><X size={13} className="text-white/40 hover:text-white/80" /></button>}
       </div>
       <div className="p-3 space-y-3">
@@ -914,7 +919,7 @@ function AudioMixer() {
             ch.master ? 'bg-purple-600/10 border border-purple-500/25' : 'bg-white/[0.02]')}>
             <div className="text-center leading-tight">
               <div className="text-[10px] font-semibold text-white/80 truncate w-full">{ch.name}</div>
-              <div className="text-[8px] text-white/35 truncate w-full">{ch.sub}</div>
+              <div className="text-[8px] text-white/55 truncate w-full">{ch.sub}</div>
             </div>
             <div className="relative w-7 h-7 rounded-full bg-[#15151f] border border-white/10">
               <div className="absolute left-1/2 top-1 w-0.5 h-2.5 bg-purple-400 origin-bottom rounded-full" style={{ transform: `translateX(-50%) rotate(${(ch.level / 100) * 270 - 135}deg)` }} />
@@ -930,10 +935,10 @@ function AudioMixer() {
                 <div className="w-full bg-gradient-to-t from-emerald-500 via-yellow-400 to-red-500" style={{ height: `${ch.mute ? 0 : ch.level}%` }} />
               </div>
             </div>
-            <div className="text-[8px] font-mono text-white/45">{dbOf(ch.level)}</div>
+            <div className="text-[8px] font-mono text-white/60">{dbOf(ch.level)}</div>
             <div className="flex gap-1">
-              <button onClick={() => set(i, { mute: !ch.mute })} className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch.mute ? 'bg-red-600 text-white' : 'bg-white/[0.06] text-white/40 hover:bg-white/15')}>M</button>
-              <button onClick={() => set(i, { solo: !ch.solo })} className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch.solo ? 'bg-yellow-500 text-black' : 'bg-white/[0.06] text-white/40 hover:bg-white/15')}>S</button>
+              <button onClick={() => set(i, { mute: !ch.mute })} className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch.mute ? 'bg-red-600 text-white' : 'bg-white/[0.06] text-white/60 hover:bg-white/15')}>M</button>
+              <button onClick={() => set(i, { solo: !ch.solo })} className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch.solo ? 'bg-yellow-500 text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/15')}>S</button>
             </div>
           </div>
         ))}
@@ -1053,7 +1058,7 @@ function MultiView() {
   const slots = Array.from({ length: 8 }, (_, i) => sources[i] ?? null)
 
   return (
-    <Panel title="Multi-View" right={<span className="text-[10px] text-white/35">8 Views</span>} className="h-[230px]">
+    <Panel title="Multi-View" right={<span className="text-[10px] text-white/55">8 Views</span>} className="h-[230px]">
       <div className="grid grid-cols-4 grid-rows-2 gap-1.5 p-2.5 h-full">
         {slots.map((s, i) => (
           <div
