@@ -7,6 +7,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import type { RawBodyRequest } from '@nestjs/common'
 import type { FastifyRequest } from 'fastify'
 import { LicensingService } from './licensing.service'
+import { MailService } from '../mail/mail.service'
 import { Public } from '../../common/decorators/public.decorator'
 import { LicenseStatus } from '@prisma/client'
 
@@ -42,6 +43,7 @@ export class PaddleWebhookController {
 
   constructor(
     private readonly licensing: LicensingService,
+    private readonly mail: MailService,
     private readonly config: ConfigService,
   ) {
     this.secret = this.config.get<string>('PADDLE_WEBHOOK_SECRET') ?? null
@@ -124,7 +126,7 @@ export class PaddleWebhookController {
           break
         }
 
-        const { key } = await this.licensing.issue({
+        const { key, expiresAt, seats } = await this.licensing.issue({
           organisation: organisation ?? email,
           email,
           termDays,
@@ -134,9 +136,19 @@ export class PaddleWebhookController {
           providerSubscriptionId: subscriptionId,
         })
 
-        // TODO: deliver `key` by email. Until that is wired, it is recoverable
-        // from the admin lookup endpoint.
         this.logger.log(`Issued ${key} for Paddle subscription ${subscriptionId}`)
+
+        // A failed send is logged inside MailService and does not throw — the
+        // licence exists regardless and is recoverable from the admin lookup
+        // endpoint, so it must not turn into a Paddle retry of an event we
+        // have already applied.
+        await this.mail.sendLicenseKey({
+          to: email,
+          organisation: organisation ?? email,
+          key,
+          expiresAt,
+          seats,
+        })
         break
       }
 

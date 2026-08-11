@@ -1,9 +1,10 @@
 import {
-  Controller, Post, Get, Body, Param, Ip, UseGuards, HttpCode,
+  Controller, Post, Get, Body, Param, Ip, UseGuards, HttpCode, NotFoundException,
 } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { LicensingService } from './licensing.service'
+import { MailService } from '../mail/mail.service'
 import { ActivateDto, RefreshDto, DeactivateDto, IssueLicenseDto } from './dto/licensing.dto'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
@@ -23,7 +24,10 @@ import { Role } from '@prisma/client'
 @ApiTags('licensing')
 @Controller('licence')
 export class LicensingController {
-  constructor(private readonly licensing: LicensingService) {}
+  constructor(
+    private readonly licensing: LicensingService,
+    private readonly mail: MailService,
+  ) {}
 
   @Public()
   // A real church activates a handful of times a year. Anything near this
@@ -62,8 +66,16 @@ export class LicensingController {
   @Roles(Role.SUPER_ADMIN)
   @Post('issue')
   @ApiOperation({ summary: 'Issue a licence manually (pilots, gifts, support)' })
-  issue(@Body() dto: IssueLicenseDto) {
-    return this.licensing.issue(dto)
+  async issue(@Body() dto: IssueLicenseDto) {
+    const { key, expiresAt, seats } = await this.licensing.issue(dto)
+    await this.mail.sendLicenseKey({
+      to: dto.email,
+      organisation: dto.organisation,
+      key,
+      expiresAt,
+      seats,
+    })
+    return { key, expiresAt, seats }
   }
 
   @ApiBearerAuth()
@@ -73,5 +85,25 @@ export class LicensingController {
   @ApiOperation({ summary: 'Look up a licence, its seats and recent activity' })
   lookup(@Param('key') key: string) {
     return this.licensing.lookup(key)
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @Post(':key/resend')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Re-send the licence key email — for a customer who lost it' })
+  async resend(@Param('key') key: string) {
+    const license = await this.licensing.lookup(key)
+    if (!license) throw new NotFoundException('That licence key was not recognised.')
+
+    const sent = await this.mail.sendLicenseKey({
+      to: license.email,
+      organisation: license.organisation,
+      key: license.key,
+      expiresAt: license.expiresAt,
+      seats: license.seats,
+    })
+    return { sent }
   }
 }

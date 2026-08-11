@@ -296,7 +296,7 @@ export class LicensingService {
     provider?: string
     providerCustomerId?: string
     providerSubscriptionId?: string
-  }): Promise<{ key: string }> {
+  }): Promise<{ key: string; expiresAt: Date; seats: number }> {
     const termDays = input.termDays ?? 365
     const key = LicensingService.generateKey()
 
@@ -316,7 +316,7 @@ export class LicensingService {
     await this.record(license.id, 'issued', `${termDays} day term`)
     this.logger.log(`Issued licence ${key} to ${input.email}`)
 
-    return { key }
+    return { key, expiresAt: license.expiresAt, seats: license.seats }
   }
 
   /** Extend a subscription on successful payment. */
