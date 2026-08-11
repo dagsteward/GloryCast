@@ -5,7 +5,7 @@ import {
   Video, Film, Music2, BookOpen, Sparkles, Users, Image as ImageIcon,
   SlidersHorizontal, Play, Radio, MonitorSmartphone, Settings, Plus,
   LayoutGrid, List, Eye, ThumbsUp, Clock, Mic, Brain, Send,
-  RotateCw, Pause, Circle, Link2, ChevronRight,
+  RotateCw, Pause, Circle, Link2, ChevronRight, ChevronLeft,
   Camera, Monitor, Palette, Timer as TimerIcon, X, Trash2,
 } from 'lucide-react'
 import { useAiCopilot } from '../hooks/useAiCopilot'
@@ -13,7 +13,7 @@ import {
   useCompositor, useProgramCanvas, usePreviewCanvas,
   type CompositorController,
 } from '../hooks/useCompositor'
-import { useMediaEngine, getStream, type SourceType } from '../hooks/useMediaEngine'
+import { useMediaEngine, getStream, type SourceType, type NetworkProtocol } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
 import { useAppStore } from '../stores/appStore'
 import { useStreamController } from '../hooks/useStreamController'
@@ -376,30 +376,64 @@ function SourcesPanel() {
   const cat = CATEGORIES[tab]
   const list = sources.filter(s => cat.types.includes(s.type))
 
-  // After adding, reveal it: jump to ALL and load it onto Preview.
+  // After adding, reveal it: jump to ALL, load it onto Preview, and reset the
+  // Add Source menu back to its root so the next open doesn't resume mid-flow.
+  const [menuView, setMenuView] = useState<'root' | 'camera' | 'network'>('root')
+  const [networkProtocol, setNetworkProtocol] = useState<NetworkProtocol | null>(null)
   const reveal = (id: string | null) => {
     setMenuOpen(false)
+    setMenuView('root')
+    setNetworkProtocol(null)
     setTab(0)
     if (id) useMediaEngine.getState().assignToPreview(id)
   }
   const [camError, setCamError] = useState<string | null>(null)
+  const cameras = useMediaEngine(s => s.cameras)
 
-  const addCamera = async () => {
-    const me = useMediaEngine.getState()
+  // Camera used to always grab whatever the OS calls "default" — with two or
+  // three cameras plugged in (the normal case for a multi-camera service)
+  // there was no way to reach camera 2 or 3 at all. This opens a picker over
+  // the real enumerated device list instead.
+  const openCameraPicker = async () => {
     setCamError(null)
+    const me = useMediaEngine.getState()
     if (me.permissionState !== 'granted') {
       const ok = await me.requestPermission()
-      if (!ok) { setCamError('Camera/mic permission denied'); setMenuOpen(false); return }
+      if (!ok) { setCamError('Camera permission denied'); return }
     }
-    const id = await me.addCamera('default', 'Camera')
-    if (!id) setCamError('No camera found')
+    await me.enumerateDevices()
+    setMenuView('camera')
+  }
+  const pickCamera = async (deviceId: string, label: string) => {
+    const id = await useMediaEngine.getState().addCamera(deviceId, label)
+    if (!id) { setCamError('Could not start that camera — it may be in use by another app'); return }
     reveal(id)
   }
-  const addScreen = async () => { reveal(await useMediaEngine.getState().addScreenSource()) }
+
+  const addScreen = async () => {
+    setCamError(null)
+    const id = await useMediaEngine.getState().addScreenSource()
+    // A null result from cancelling the OS share picker is an expected,
+    // silent outcome — not an error worth interrupting the operator over.
+    if (id) reveal(id)
+  }
   const addColor  = () => reveal(useMediaEngine.getState().addColorSource('#1e293b', 'Color'))
   const addClock  = () => reveal(useMediaEngine.getState().addClockSource())
   const addTimer  = () => reveal(useMediaEngine.getState().addCountdownSource(5, 'Countdown'))
   const addBars   = () => reveal(useMediaEngine.getState().addTestPattern())
+
+  // NDI / Network had its own category tab and a fully working store method
+  // (addNetworkSource) but no way to reach it from Add Source — the entire
+  // category could show sources yet never gain one.
+  const connectNetwork = (label: string, url: string) => {
+    if (!networkProtocol) return
+    const id = useMediaEngine.getState().addNetworkSource({
+      protocol: networkProtocol,
+      url: url.trim() || undefined,
+      label: label.trim() || undefined,
+    })
+    reveal(id)
+  }
 
   return (
     <Panel className="bg-[#0c0c15]">
@@ -420,16 +454,67 @@ function SourcesPanel() {
           </button>
           {menuOpen && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-8 z-40 w-44 rounded-lg bg-[#15151f] border border-white/10 shadow-2xl p-1.5 space-y-0.5">
-                <AddItem icon={Camera}  label="Camera"       onClick={addCamera} />
-                <AddItem icon={Monitor} label="Screen Share" onClick={addScreen} />
-                <AddItem icon={Film}    label="Media File"   onClick={() => fileRef.current?.click()} />
-                <AddItem icon={ImageIcon} label="Image"      onClick={() => imageRef.current?.click()} />
-                <AddItem icon={Palette} label="Color"        onClick={addColor} />
-                <AddItem icon={TimerIcon} label="Countdown"  onClick={addTimer} />
-                <AddItem icon={Clock}   label="Clock"        onClick={addClock} />
-                <AddItem icon={Cpu}     label="Test Pattern" onClick={addBars} />
+              <div className="fixed inset-0 z-30" onClick={() => reveal(null)} />
+              <div className="absolute right-0 top-8 z-40 w-56 rounded-lg bg-[#15151f] border border-white/10 shadow-2xl p-1.5">
+                {menuView === 'root' && (
+                  <div className="space-y-0.5">
+                    <AddItem icon={Camera}  label="Camera"        onClick={openCameraPicker} />
+                    <AddItem icon={Monitor} label="Screen Share"  onClick={addScreen} />
+                    <AddItem icon={Link2}   label="NDI / Network" onClick={() => setMenuView('network')} />
+                    <AddItem icon={Film}    label="Media File"    onClick={() => fileRef.current?.click()} />
+                    <AddItem icon={ImageIcon} label="Image"       onClick={() => imageRef.current?.click()} />
+                    <AddItem icon={Palette} label="Color"         onClick={addColor} />
+                    <AddItem icon={TimerIcon} label="Countdown"   onClick={addTimer} />
+                    <AddItem icon={Clock}   label="Clock"         onClick={addClock} />
+                    <AddItem icon={Cpu}     label="Test Pattern"  onClick={addBars} />
+                  </div>
+                )}
+
+                {menuView === 'camera' && (
+                  <div className="p-0.5">
+                    <BackRow onClick={() => setMenuView('root')} />
+                    {cameras.length === 0 ? (
+                      <p className="px-2 py-3 text-[10.5px] text-white/40 leading-relaxed">
+                        No cameras detected. Check the camera is connected and not in use by another app.
+                      </p>
+                    ) : (
+                      cameras.map(c => (
+                        <button
+                          key={c.deviceId}
+                          onClick={() => pickCamera(c.deviceId, c.label || 'Camera')}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-white/80 hover:bg-white/[0.06] text-left transition-colors"
+                        >
+                          <Camera size={12} className="text-purple-300 shrink-0" />
+                          <span className="truncate">{c.label || 'Camera'}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {menuView === 'network' && !networkProtocol && (
+                  <div className="p-0.5">
+                    <BackRow onClick={() => setMenuView('root')} />
+                    {NETWORK_PROTOCOLS.map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setNetworkProtocol(p)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-white/80 hover:bg-white/[0.06] text-left transition-colors"
+                      >
+                        <Link2 size={12} className="text-purple-300 shrink-0" />
+                        {PROTOCOL_META[p].label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {networkProtocol && (
+                  <NetworkConnectForm
+                    protocol={networkProtocol}
+                    onCancel={() => setNetworkProtocol(null)}
+                    onConnect={connectNetwork}
+                  />
+                )}
               </div>
             </>
           )}
@@ -488,6 +573,68 @@ function AddItem({ icon: Icon, label, onClick }: { icon: typeof Camera; label: s
     <button onClick={onClick} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[12px] text-white/70 hover:bg-white/[0.06] hover:text-white">
       <Icon size={13} className="text-purple-300" /> {label}
     </button>
+  )
+}
+
+function BackRow({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-1 text-[9px] text-white/40 hover:text-white/70 mb-1.5 px-1.5 py-1 transition-colors">
+      <ChevronLeft size={10} /> Back
+    </button>
+  )
+}
+
+// ── NDI / Network connect form ──────────────────────────────────────────────
+// Every protocol GloryCast can ingest, with the same copy the (previously
+// unwired) SourceGrid component used — protocol-specific hint and placeholder
+// so an operator knows exactly what to paste.
+
+const NETWORK_PROTOCOLS: NetworkProtocol[] = ['ndi', 'rtmp', 'srt', 'hls', 'whep']
+
+const PROTOCOL_META: Record<NetworkProtocol, { label: string; hint: string; placeholder: string }> = {
+  ndi:  { label: 'NDI Source',    hint: 'Receive an NDI stream from a PTZ camera, encoder, or another machine on the LAN.', placeholder: 'NDI source name  e.g. STUDIO-PC (Channel 1)' },
+  rtmp: { label: 'Stream URL',    hint: 'Relay an RTMP / SRT / HLS feed. HLS (.m3u8) and progressive MP4/WebM play directly.', placeholder: 'https://… .m3u8  ·  rtmp://…  ·  srt://…' },
+  srt:  { label: 'SRT Source',    hint: 'Low-latency SRT feed from a compatible encoder.', placeholder: 'srt://HOST:port' },
+  hls:  { label: 'HLS Source',    hint: 'HTTP Live Streaming playlist.', placeholder: 'https://… .m3u8' },
+  whep: { label: 'WebRTC Source', hint: 'Sub-second WebRTC (WHEP) ingest.', placeholder: 'https://HOST/whep' },
+}
+
+function NetworkConnectForm({
+  protocol, onCancel, onConnect,
+}: {
+  protocol: NetworkProtocol
+  onCancel: () => void
+  onConnect: (label: string, url: string) => void
+}) {
+  const meta = PROTOCOL_META[protocol]
+  const [label, setLabel] = useState('')
+  const [url, setUrl] = useState('')
+
+  return (
+    <div className="p-1.5 space-y-2">
+      <BackRow onClick={onCancel} />
+      <div>
+        <p className="text-[11px] font-semibold text-white/85">{meta.label}</p>
+        <p className="text-[9px] text-white/35 leading-snug mt-0.5">{meta.hint}</p>
+      </div>
+      <input
+        value={label} onChange={e => setLabel(e.target.value)}
+        placeholder="Display name (optional)"
+        className="w-full px-2 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-[10px] text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/60"
+      />
+      <input
+        value={url} onChange={e => setUrl(e.target.value)}
+        placeholder={meta.placeholder}
+        onKeyDown={e => { if (e.key === 'Enter') onConnect(label, url) }}
+        className="w-full px-2 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-[10px] font-mono text-white/85 placeholder:text-white/25 focus:outline-none focus:border-purple-500/60"
+      />
+      <button
+        onClick={() => onConnect(label, url)}
+        className="w-full py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-[10px] font-semibold text-white transition-colors"
+      >
+        {url.trim() ? 'Connect' : 'Add Slot'}
+      </button>
+    </div>
   )
 }
 
