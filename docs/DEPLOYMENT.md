@@ -55,6 +55,21 @@ cannot run the session-level statements and advisory locks they rely on.
 > `P1001: Can't reach database server`. The session-mode pooler on port 5432 is
 > the IPv4-reachable equivalent and is what you want.
 
+> **Copy the host from the dashboard — do not reconstruct it.**
+> The prefix is `aws-0` or `aws-1` depending on which cluster the project
+> landed on, and it is not derivable from the region. A wrong prefix resolves
+> and connects, then fails with
+> `FATAL: (ENOTFOUND) tenant/user postgres.<ref> not found`, which reads like a
+> credentials problem but is actually the wrong host.
+>
+> To identify the right one empirically, probe with any password: "tenant not
+> found" means wrong host, while "password authentication failed" means the
+> tenant is there.
+>
+> ```bash
+> psql "postgresql://postgres.<ref>:probe@aws-1-<region>.pooler.supabase.com:5432/postgres" -c "select 1"
+> ```
+
 Copy both strings from **Project Settings → Database → Connection string**.
 Do not hand-edit a template: the region and the username format
 (`postgres.<ref>`, not `postgres`) both vary by project.
