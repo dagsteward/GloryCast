@@ -227,6 +227,30 @@ export const useAppStore = create<AppState>()(
       }),
       {
         name: 'glorycast-app',
+        // `streamKey` was added to StreamDestination after this store
+        // shipped. zustand's persist replaces `destinations` wholesale from
+        // localStorage rather than merging per-field, so any installation
+        // with data saved before that change loads destination objects with
+        // streamKey simply absent — not empty, genuinely absent. Code that
+        // called d.streamKey.trim() crashed the ENTIRE APP on mount for
+        // exactly that reason: a real user hit this, it is not a synthetic
+        // case.
+        //
+        // This was first attempted with persist's `migrate` option, gated on
+        // `fromVersion < 1`. It silently never ran: data with no "version"
+        // key in storage — which is exactly what pre-migration data looks
+        // like — makes zustand pass fromVersion as `undefined`, and
+        // `undefined < 1` is `false` in JS. onRehydrateStorage has no such
+        // version bookkeeping to get wrong: it runs unconditionally after
+        // every load and receives the actual post-hydration state, so this
+        // self-heals regardless of what shape the stored data happens to be.
+        onRehydrateStorage: () => (state) => {
+          if (!state || !Array.isArray(state.destinations)) return
+          for (const d of state.destinations) {
+            if (d.rtmpUrl === undefined) d.rtmpUrl = ''
+            if (d.streamKey === undefined) d.streamKey = ''
+          }
+        },
         partialize: (s) => ({
           church: s.church,
           userDisplayName: s.userDisplayName,

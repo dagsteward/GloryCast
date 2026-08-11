@@ -147,7 +147,7 @@ export function useStreamController(): StreamController {
 
     // Refuse to start rather than connect to a URL with a missing key: FFmpeg
     // would fail seconds later, mid-service, with an opaque error.
-    const unconfigured = enabled.filter(d => !d.rtmpUrl.trim() || !d.streamKey.trim())
+    const unconfigured = enabled.filter(d => !d.rtmpUrl?.trim() || !d.streamKey?.trim())
     if (unconfigured.length > 0) {
       setError(
         `Missing stream key for ${unconfigured.map(d => d.name).join(', ')}. ` +

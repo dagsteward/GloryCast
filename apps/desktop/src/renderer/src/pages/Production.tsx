@@ -986,7 +986,7 @@ function StreamingPanel({ streaming, setStreaming }: { streaming: boolean; setSt
       <div className="flex flex-col h-full p-3 gap-2">
         <div className="flex-1 space-y-1.5 overflow-y-auto">
           {destinations.map((d) => {
-            const configured = Boolean(d.rtmpUrl.trim() && d.streamKey.trim())
+            const configured = Boolean(d.rtmpUrl?.trim() && d.streamKey?.trim())
             return (
               <button
                 key={d.id}

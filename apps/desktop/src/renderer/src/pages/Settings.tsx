@@ -558,7 +558,7 @@ function StreamingSettings() {
 
       <div className="space-y-3">
         {destinations.map((d) => {
-          const configured = Boolean(d.rtmpUrl.trim() && d.streamKey.trim())
+          const configured = Boolean(d.rtmpUrl?.trim() && d.streamKey?.trim())
           return (
             <div
               key={d.id}
