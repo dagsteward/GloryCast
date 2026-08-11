@@ -8,13 +8,13 @@ import {
   RotateCw, Pause, Circle, Link2, ChevronRight, ChevronLeft,
   Camera, Monitor, Palette, Timer as TimerIcon, X, Trash2,
 } from 'lucide-react'
-import { useAiCopilot } from '../hooks/useAiCopilot'
 import {
   useCompositor, useProgramCanvas, usePreviewCanvas,
   type CompositorController,
 } from '../hooks/useCompositor'
 import { useMediaEngine, getStream, type SourceType, type NetworkProtocol } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
+import { AsrEngineBadge } from '../components/ai/AsrEngineBadge'
 import { useAppStore } from '../stores/appStore'
 import { useStreamController } from '../hooks/useStreamController'
 import { loadTranslation, getVerseText, searchBibleMerged, BUNDLED_TRANSLATIONS } from '../lib/bibleData'
@@ -99,7 +99,12 @@ function SourceVideo({ id, type, label, className }: { id: string | null; type?:
 }
 
 export function ProductionPage() {
-  useAiCopilot()
+  // The AI copilot is mounted exactly once, in MainLayout — it owns the mic,
+  // the AudioContext, and (for Whisper) the model process. Calling it again
+  // here would open a second concurrent audio capture and a second Whisper
+  // pipeline every time this page is visited, doubling detections and
+  // resource use for no benefit; this page reads its output from
+  // serviceStore like everywhere else.
 
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
@@ -712,9 +717,11 @@ function AiAssistant({ onLive, onStage, liveRef, stageRef }: {
         <span className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">Bible</span>
         <button
           onClick={() => setAiListening(!aiListening)}
-          title="Live voice detection (best-effort; needs internet & a speech engine)"
-          className={cn('ml-auto flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-semibold', aiListening ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] text-white/50 hover:text-white/80')}
-        ><Mic size={9} /> {aiListening ? 'Voice On' : 'Voice'}</button>
+          title={aiListening ? 'Click to stop voice detection' : 'Click to start voice detection'}
+          className="ml-auto"
+        >
+          <AsrEngineBadge size="sm" accent="purple" />
+        </button>
       </div>
       <div className="flex flex-col h-[calc(100%-2.25rem)]">
         {/* Manual lookup — always works offline from bundled KJV + WEB */}

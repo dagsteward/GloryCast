@@ -116,6 +116,14 @@ export function useAiCopilot(): AsrStatus {
     onTranscript: handleTranscript,
   })
 
+  // Publish which engine is actually running so every workspace — Cinematic,
+  // Minimal, Command — can tell the operator the truth: running locally and
+  // privately on Whisper, or on the cloud fallback and needing internet.
+  const setAsrStatus = useServiceStore(s => s.setAsrStatus)
+  useEffect(() => {
+    setAsrStatus({ engine: status.engine, ready: status.ready, detail: status.detail })
+  }, [status.engine, status.ready, status.detail, setAsrStatus])
+
   // Clear the de-dup windows when listening stops, so restarting a service
   // does not silently suppress a verse that was used earlier.
   useEffect(() => {

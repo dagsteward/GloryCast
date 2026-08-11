@@ -7,6 +7,7 @@ import {
 import { useServiceStore } from '../stores/serviceStore'
 import { useAppStore } from '../stores/appStore'
 import { useTeamStore, TEAM_ROLES, type TeamRole } from '../stores/teamStore'
+import { AsrEngineBadge } from '../components/ai/AsrEngineBadge'
 import { cn } from '../lib/utils'
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -94,16 +95,12 @@ function AiAssistantPanel() {
         </button>
       }
     >
-      {/* Listening state */}
+      {/* Listening state — which engine, not just on/off, since that is the
+          actual thing worth telling a church: private and offline (Whisper)
+          versus needing the internet (cloud fallback). */}
       <div className="px-3.5 py-3 border-b border-white/[0.06]">
-        <div className="flex items-center gap-2 mb-2.5">
-          <span className={cn(
-            'w-1.5 h-1.5 rounded-full',
-            aiListening ? 'bg-purple-500 animate-pulse' : 'bg-white/20',
-          )} />
-          <span className="text-[11px] text-white/50">
-            {aiListening ? 'Listening…' : 'Not listening'}
-          </span>
+        <div className="mb-2.5">
+          <AsrEngineBadge accent="purple" />
         </div>
         <Waveform active={aiListening} />
       </div>

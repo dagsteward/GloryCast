@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useMediaEngine, getStream, type MediaSourceMeta } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
+import { AsrEngineBadge } from '../components/ai/AsrEngineBadge'
 import { useAppStore } from '../stores/appStore'
 import { useEngineStore } from '../stores/engineStore'
 import { cn } from '../lib/utils'
@@ -308,18 +309,7 @@ function AiMonitorPanel() {
   return (
     <Panel
       title="AI SCRIPTURE MONITORING"
-      action={
-        <span className={cn(
-          'flex items-center gap-1.5 text-[9.5px] font-semibold',
-          aiListening ? 'text-teal-400' : 'text-white/30',
-        )}>
-          <span className={cn(
-            'w-1.5 h-1.5 rounded-full',
-            aiListening ? 'bg-teal-400 animate-pulse' : 'bg-white/20',
-          )} />
-          {aiListening ? 'LISTENING' : 'IDLE'}
-        </span>
-      }
+      action={<AsrEngineBadge size="sm" accent="teal" />}
     >
       <div className="p-3">
         {latest ? (

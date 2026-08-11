@@ -75,6 +75,19 @@ interface ServiceState {
   transcript:   string           // rolling live transcript window
   detections:   Detection[]      // newest first, capped
 
+  /**
+   * Which speech engine is actually running: 'whisper' (local, offline,
+   * private — the product's real differentiator), 'web-speech' (cloud
+   * fallback, needs internet), or 'none'. Set once by the single global
+   * useAiCopilot() instance in MainLayout so every workspace shows the truth
+   * about what's listening rather than a bare on/off dot — a church running
+   * on the cloud fallback should be able to tell, and a church running
+   * locally should get to see that they are.
+   */
+  asrEngine:  'whisper' | 'web-speech' | 'none'
+  asrReady:   boolean
+  asrDetail?: string
+
   // ── Shared Preview → Program bus ───────────────────────────────────
   preview:  LiveItem | null
   program:  LiveItem | null
@@ -98,6 +111,7 @@ interface ServiceState {
 
   // ── Actions: AI engine ─────────────────────────────────────────────
   setAiListening: (v: boolean) => void
+  setAsrStatus: (s: { engine: 'whisper' | 'web-speech' | 'none'; ready: boolean; detail?: string }) => void
   toggleAutoPilot: () => void
   setProMode: (v: boolean) => void
   setTranscript: (t: string) => void
@@ -152,6 +166,9 @@ export const useServiceStore = create<ServiceState>()(
       autoPilot:   true,
       proMode:     false,
       transcript:  '',
+      asrEngine:   'none',
+      asrReady:    false,
+      asrDetail:   undefined,
       detections:  [],
 
       // ── Shared bus ──
@@ -193,6 +210,9 @@ export const useServiceStore = create<ServiceState>()(
 
       // ── AI engine actions ──
       setAiListening: (v) => set({ aiListening: v }, false, 'setAiListening'),
+      setAsrStatus: (s) => set({
+        asrEngine: s.engine, asrReady: s.ready, asrDetail: s.detail,
+      }, false, 'setAsrStatus'),
 
       toggleAutoPilot: () => set((s) => ({ autoPilot: !s.autoPilot }), false, 'toggleAutoPilot'),
 
