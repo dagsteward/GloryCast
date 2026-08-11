@@ -49,6 +49,21 @@ for (const name of ['DATABASE_URL', 'DIRECT_URL']) {
     process.exit(1)
   }
 
+  // An unencoded '@' in the password splits the URL at the wrong place: the
+  // parser reads everything before the FIRST '@' as credentials, so the
+  // username and host are both wrong. Postgres then reports plain
+  // "authentication failed", which points at the password rather than at its
+  // encoding.
+  const afterScheme = value.slice(value.indexOf('://') + 3)
+  const authority = afterScheme.split('/')[0]
+  if ((authority.match(/@/g) ?? []).length > 1) {
+    fail(`${name} has more than one "@" before the host.`)
+    fail('A password containing @ : / ? # or % must be percent-encoded:')
+    fail('  @ → %40   : → %3A   / → %2F   ? → %3F   # → %23   % → %25')
+    fail('For example admin@example becomes admin%40example.')
+    process.exit(1)
+  }
+
   if (!value.startsWith('postgres://') && !value.startsWith('postgresql://')) {
     fail(`${name} must start with postgresql:// — got "${value.slice(0, 24)}…"`)
     process.exit(1)
