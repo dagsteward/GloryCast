@@ -39,7 +39,7 @@ import {
  * production key.
  */
 const LICENSE_PUBLIC_KEY = process.env.GLORYCAST_LICENSE_PUBKEY ?? `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=
+MCowBQYDK2VwAyEAuqY1HRveBX+UHdHrkRW/jKQ4lqBFDVFKtK66og+7ONk=
 -----END PUBLIC KEY-----`
 
 /** Where the licence server lives. Configurable for self-hosting. */
