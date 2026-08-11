@@ -56,7 +56,19 @@ async function bootstrap() {
   })
 
   app.enableCors({
-    origin: origins,
+    origin: (origin, callback) => {
+      // The packaged desktop app loads its renderer from file://, and pages
+      // served from file:// carry the literal Origin "null" per the Fetch
+      // spec — there is no configurable value to add to an allow-list for
+      // it. Auth here is a Bearer token, not a cookie, so allowing the null
+      // origin does not expose a CSRF surface the way it would for a
+      // cookie-authenticated API: a page cannot forge a token it never had.
+      if (!origin || origin === 'null' || origins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'), false)
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })

@@ -4,6 +4,11 @@ import path from 'path'
 
 export default defineConfig({
   root: 'src/renderer',
+  // Vite's default envDir is `root` (src/renderer), so .env.production placed
+  // at the app root — alongside package.json, where every other env file in
+  // this repo lives — would be silently ignored. Point it here explicitly so
+  // VITE_API_URL is picked up from apps/desktop/.env.production.
+  envDir: path.resolve(__dirname),
   // Relative base so the packaged app loads its assets over file:// (Electron
   // loadFile). Absolute "/assets" paths resolve to the drive root under file://
   // and render a blank window.

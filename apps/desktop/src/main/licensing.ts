@@ -11,6 +11,7 @@ import {
   type SignedLicense,
   type TrialRecord,
 } from '@glorycast/licensing'
+import { API_BASE_URL } from './config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Licensing — trial tracking, offline licence validation, activation.
@@ -44,8 +45,7 @@ MCowBQYDK2VwAyEAuqY1HRveBX+UHdHrkRW/jKQ4lqBFDVFKtK66og+7ONk=
 
 /** Where the licence server lives. Configurable for self-hosting. */
 const LICENSE_API =
-  process.env.GLORYCAST_LICENSE_API
-  ?? `${(process.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/+$/, '')}/api/v1/licence`
+  process.env.GLORYCAST_LICENSE_API ?? `${API_BASE_URL}/api/v1/licence`
 
 function stateDir(): string {
   const dir = join(app.getPath('userData'), 'licence')

@@ -6,6 +6,7 @@ import { registerSystemStats } from './system-stats'
 import { registerEncoder, shutdownEncoder } from './encoder'
 import { registerWhisper } from './whisper'
 import { registerLicensing } from './licensing'
+import { API_BASE_URL } from './config'
 import { AppStore } from './store'
 
 // The Vite dev server legitimately needs 'unsafe-eval', which always triggers
@@ -148,7 +149,7 @@ async function bootstrap() {
   // The built bundle needs no eval, so this closes the security gap without
   // breaking the dev server (which is left untouched and requires unsafe-eval).
   if (!DEV_SERVER_URL) {
-    const apiOrigin = (process.env.VITE_API_URL ?? 'http://localhost:3001').replace(/\/+$/, '')
+    const apiOrigin = API_BASE_URL
     const csp = [
       "default-src 'self'",
       "img-src 'self' data: blob:",
