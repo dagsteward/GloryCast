@@ -37,17 +37,31 @@ Rotating the pair invalidates every licence in the field. Treat it as permanent.
 ## 2. Supabase
 
 Supabase gives you two connection strings and **they are not interchangeable**.
+Both use the **pooler host**; they differ only by port.
 
-| Variable | Port | Used for | Why |
-|---|---|---|---|
-| `DATABASE_URL` | 6543 (pooler) | All runtime queries | Postgres allows only a few dozen direct connections; a container opening one per request exhausts them under Sunday load |
-| `DIRECT_URL` | 5432 (direct) | Migrations only | PgBouncer's transaction pooling cannot run the session-level statements and advisory locks migrations need |
+| Variable | Host | Port | Mode | Used for |
+|---|---|---|---|---|
+| `DATABASE_URL` | `aws-0-<region>.pooler.supabase.com` | 6543 | transaction | All runtime queries |
+| `DIRECT_URL` | `aws-0-<region>.pooler.supabase.com` | 5432 | session | Migrations only |
 
-Both are under **Project Settings → Database → Connection string**.
+Runtime uses the transaction pooler because Postgres allows only a few dozen
+direct connections, and a container opening one per request exhausts them under
+Sunday load. Migrations need **session** mode, because transaction pooling
+cannot run the session-level statements and advisory locks they rely on.
+
+> **Do not use `db.<ref>.supabase.co:5432` for `DIRECT_URL`.**
+> That hostname is IPv6-only on current Supabase projects. Any host without
+> IPv6 egress — Railway included — fails with
+> `P1001: Can't reach database server`. The session-mode pooler on port 5432 is
+> the IPv4-reachable equivalent and is what you want.
+
+Copy both strings from **Project Settings → Database → Connection string**.
+Do not hand-edit a template: the region and the username format
+(`postgres.<ref>`, not `postgres`) both vary by project.
 
 ```
 DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
-DIRECT_URL=postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
+DIRECT_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
 The `pgbouncer=true` and `connection_limit=1` parameters are required, not
