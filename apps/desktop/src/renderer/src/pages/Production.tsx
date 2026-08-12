@@ -377,6 +377,7 @@ const CATEGORIES: { label: string; types: SourceType[] }[] = [
 const SOURCE_ICON: Record<string, typeof Camera> = {
   camera: Camera, screen: Monitor, media: Film, image: ImageIcon,
   color: Palette, timer: TimerIcon, clock: Clock, pattern: Cpu, ndi: Link2, network: Wifi,
+  microphone: Mic,
 }
 
 function SourcesPanel() {
@@ -401,7 +402,7 @@ function SourcesPanel() {
 
   // After adding, reveal it: jump to ALL, load it onto Preview, and reset the
   // Add Source menu back to its root so the next open doesn't resume mid-flow.
-  const [menuView, setMenuView] = useState<'root' | 'camera' | 'network'>('root')
+  const [menuView, setMenuView] = useState<'root' | 'camera' | 'mic' | 'network'>('root')
   const [networkProtocol, setNetworkProtocol] = useState<NetworkProtocol | null>(null)
   const reveal = (id: string | null) => {
     setMenuOpen(false)
@@ -412,6 +413,7 @@ function SourcesPanel() {
   }
   const [camError, setCamError] = useState<string | null>(null)
   const cameras = useMediaEngine(s => s.cameras)
+  const mics = useMediaEngine(s => s.microphones)
 
   // Camera used to always grab whatever the OS calls "default" — with two or
   // three cameras plugged in (the normal case for a multi-camera service)
@@ -431,6 +433,25 @@ function SourcesPanel() {
     const id = await useMediaEngine.getState().addCamera(deviceId, label)
     if (!id) { setCamError('Could not start that camera — it may be in use by another app'); return }
     reveal(id)
+  }
+
+  // The mixer's whole reason to exist. Without a microphone source nothing
+  // ever produces an audio track, so the Audio Mixer had no channels at all.
+  const openMicPicker = async () => {
+    setCamError(null)
+    const me = useMediaEngine.getState()
+    if (me.permissionState !== 'granted') {
+      const ok = await me.requestPermission()
+      if (!ok) { setCamError('Microphone permission denied'); return }
+    }
+    await me.enumerateDevices()
+    setMenuView('mic')
+  }
+  const pickMic = async (deviceId: string, label: string) => {
+    const id = await useMediaEngine.getState().addMicrophone(deviceId, label)
+    if (!id) { setCamError('Could not open that microphone — it may be in use by another app'); return }
+    // Audio-only: deliberately NOT sent to preview, which would put black on air.
+    setMenuOpen(false); setMenuView('root'); setTab(0)
   }
 
   const addScreen = async () => {
@@ -494,6 +515,7 @@ function SourcesPanel() {
                 {menuView === 'root' && (
                   <div className="space-y-0.5">
                     <AddItem icon={Camera}  label="Camera"        onClick={openCameraPicker} />
+                    <AddItem icon={Mic}     label="Microphone"    onClick={openMicPicker} />
                     <AddItem icon={Monitor} label="Screen Share"  onClick={addScreen} />
                     <AddItem icon={Link2}   label="NDI / Network" onClick={() => setMenuView('network')} />
                     <AddItem icon={Film}    label="Media File"    onClick={() => fileRef.current?.click()} />
@@ -521,6 +543,28 @@ function SourcesPanel() {
                         >
                           <Camera size={12} className="text-purple-300 shrink-0" />
                           <span className="truncate">{c.label || 'Camera'}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {menuView === 'mic' && (
+                  <div className="p-0.5">
+                    <BackRow onClick={() => setMenuView('root')} />
+                    {mics.length === 0 ? (
+                      <p className="px-2 py-3 text-[10.5px] text-white/40 leading-relaxed">
+                        No microphones detected. Check the device is connected and not in use by another app.
+                      </p>
+                    ) : (
+                      mics.map(m => (
+                        <button
+                          key={m.deviceId}
+                          onClick={() => pickMic(m.deviceId, m.label?.split('(')[0].trim() || 'Microphone')}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-white/80 hover:bg-white/[0.06] text-left transition-colors"
+                        >
+                          <Mic size={12} className="text-emerald-300 shrink-0" />
+                          <span className="truncate">{m.label?.split('(')[0].trim() || 'Microphone'}</span>
                         </button>
                       ))
                     )}
@@ -580,9 +624,9 @@ function SourcesPanel() {
             return (
               <div
                 key={s.id}
-                onClick={() => assignToPreview(s.id)}
-                onDoubleClick={() => assignToProgram(s.id)}
-                title="Click → Preview · Double-click → Program"
+                onClick={() => { if (s.hasVideo !== false) assignToPreview(s.id) }}
+                onDoubleClick={() => { if (s.hasVideo !== false) assignToProgram(s.id) }}
+                title={s.hasVideo === false ? 'Audio only — mix it on the Audio Mixer page' : 'Click → Preview · Double-click → Program'}
                 className={cn(
                   'rounded-lg overflow-hidden border bg-black/40 group cursor-pointer transition-colors relative',
                   onPgm ? 'border-red-500' : onPvw ? 'border-emerald-500' : 'border-white/[0.07] hover:border-purple-500/40',

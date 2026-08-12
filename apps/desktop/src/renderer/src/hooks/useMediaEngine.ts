@@ -45,6 +45,8 @@ export type SourceType =
   | 'camera' | 'screen' | 'media' | 'pattern'
   | 'image' | 'color' | 'timer' | 'clock'
   | 'ndi' | 'network'
+  /** Audio only — a desk feed or lapel mic. Carries no video. */
+  | 'microphone'
 
 /** Sources fed over the network (NDI / RTMP-SRT-HLS relays). */
 export type NetworkProtocol = 'ndi' | 'rtmp' | 'srt' | 'hls' | 'whep'
@@ -321,6 +323,7 @@ interface MediaEngineState {
   enumerateDevices:  () => Promise<void>
   requestPermission: () => Promise<boolean>
   addCamera:         (deviceId: string, label: string) => Promise<string | null>
+  addMicrophone:     (deviceId: string, label: string) => Promise<string | null>
   addScreenSource:   () => Promise<string | null>
   addMediaFile:      (file: File) => string
   addTestPattern:    () => string
@@ -408,6 +411,49 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
         return id
       } catch (e) {
         console.warn('[MediaEngine] addCamera:', e)
+        return null
+      }
+    },
+
+    /**
+     * Add a microphone or desk feed as an audio-only source.
+     *
+     * Nothing else could produce a mixer channel: cameras are captured with
+     * audio: false, and the mixer refuses a stream with no audio track. Add
+     * Source offered no microphone at all, so the Audio Mixer had nothing to
+     * mix and looked broken. This is the input the whole desk depends on.
+     *
+     * Processing is left off deliberately. Browser echo cancellation, noise
+     * suppression and AGC are tuned for a laptop mic on a call; on a board
+     * feed they pump and gate exactly where a preacher pauses for effect.
+     */
+    addMicrophone: async (deviceId, label) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: {
+            deviceId: deviceId && deviceId !== 'default' ? { exact: deviceId } : undefined,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        })
+        if (stream.getAudioTracks().length === 0) {
+          stream.getTracks().forEach(t => t.stop())
+          return null
+        }
+
+        const id = uid('mic')
+        _streams.set(id, stream)
+        set(s => ({
+          sources: [...s.sources, {
+            id, label, type: 'microphone', deviceId,
+            active: true, hasVideo: false, hasAudio: true,
+          }],
+        }))
+        return id
+      } catch (e) {
+        console.warn('[MediaEngine] addMicrophone:', e)
         return null
       }
     },

@@ -155,6 +155,11 @@ export function useCompositor(liveGraphic: ProgramGraphic | null): CompositorCon
     const liveIds = new Set<string>()
 
     for (const source of sources) {
+      // Audio-only sources have no frame to texture. Registering one would
+      // create a video element that never yields a frame, and switching to it
+      // would put black on air.
+      if (source.hasVideo === false) continue
+
       const video = ensureVideo(source.id)
       if (video) {
         liveIds.add(source.id)
