@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
+import { ErrorBoundary } from '../components/shell/ErrorBoundary'
 import { Sidebar } from '../components/shell/Sidebar'
 import { TopBar } from '../components/shell/TopBar'
 import { StatusBar } from '../components/shell/StatusBar'
@@ -26,6 +27,13 @@ export function MainLayout() {
   // Applies the workspace palette to <html> before anything paints.
   useWorkspaceTheme()
 
+  // Names the failing screen in the fallback, so a volunteer reporting a fault
+  // mid-service can say which one rather than "it broke".
+  const { pathname } = useLocation()
+  const pageLabel = (pathname === '/' ? 'production' : pathname.replace(/^\//, ''))
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+
   // Always-listening AI engine — runs once for the whole app. While a service
   // is live, it feeds scripture + song detections into the shared serviceStore.
   useAiCopilot()
@@ -39,7 +47,14 @@ export function MainLayout() {
 
   const content = (
     <main className="flex-1 overflow-hidden relative">
-      <Outlet />
+      {/* Per-page boundary, INSIDE the shell: a page that throws leaves the
+          rail, top bar and status bar alive, so the operator can still see
+          stream state and navigate away rather than facing a blank window.
+          Keyed by path so moving to another page clears a previous fault
+          instead of the boundary latching until reload. */}
+      <ErrorBoundary key={pathname} label={pageLabel}>
+        <Outlet />
+      </ErrorBoundary>
     </main>
   )
 

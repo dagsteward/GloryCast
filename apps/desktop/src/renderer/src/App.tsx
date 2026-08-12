@@ -15,9 +15,14 @@ import { AnalyticsPage } from './pages/Analytics'
 import { ModulePlaceholder } from './pages/ModulePlaceholder'
 import { MinimalHomePage } from './pages/MinimalHome'
 import { CommandCenterPage } from './pages/CommandCenter'
+import { ErrorBoundary } from './components/shell/ErrorBoundary'
 
 export function App() {
   return (
+    // Root boundary. The per-page one in MainLayout handles page faults while
+    // keeping the shell alive; this catches what that cannot — the shell
+    // itself, and the projection windows, which render outside MainLayout.
+    <ErrorBoundary isRoot label="GloryCast">
     <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AnimatePresence mode="wait">
         <Routes>
@@ -95,5 +100,6 @@ export function App() {
         </Routes>
       </AnimatePresence>
     </HashRouter>
+    </ErrorBoundary>
   )
 }
