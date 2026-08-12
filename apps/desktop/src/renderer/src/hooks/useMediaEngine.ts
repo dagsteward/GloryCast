@@ -61,6 +61,8 @@ export interface MediaSourceMeta {
   protocol?: NetworkProtocol
   url?: string
   status?: 'connecting' | 'live' | 'offline'
+  /** How the source is fitted into the frame. Images only, for now. */
+  fit?: SourceFit
 }
 
 export interface AppearanceConfig {
@@ -152,7 +154,23 @@ function createColorStream(color: string): MediaStream {
   }, 4)
 }
 
-function createImageStream(url: string): MediaStream {
+/**
+ * How a still image is fitted into the 16:9 program frame.
+ *   cover   — fill the frame, cropping the overflow (broadcast default)
+ *   contain — show the whole image, pillar/letterboxing the remainder
+ *   fill    — stretch to the frame, ignoring aspect ratio
+ * Matches the fit control a vMix operator expects on an image input.
+ */
+export type SourceFit = 'cover' | 'contain' | 'fill'
+
+/**
+ * Live fit mode per source id. Held outside React (like the stream pool) so the
+ * canvas draw loop can read the current value every frame without the stream
+ * being torn down and rebuilt when the operator changes the fit.
+ */
+const _fits = new Map<string, SourceFit>()
+
+function createImageStream(url: string, id: string): MediaStream {
   const img = new Image()
   img.crossOrigin = 'anonymous'
   img.src = url
@@ -161,12 +179,23 @@ function createImageStream(url: string): MediaStream {
   return makeCanvasStream((ctx, w, h) => {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h)
     if (!ready) return
-    // Cover-fit the image.
+
+    // Previously this was hard-coded to cover, so any image whose aspect ratio
+    // differed from 16:9 was silently cropped with no way to see the whole
+    // thing — a portrait photo lost its top and bottom entirely.
+    const fit = _fits.get(id) ?? 'cover'
     const ir = img.width / img.height, cr = w / h
-    let dw = w, dh = h, dx = 0, dy = 0
-    if (ir > cr) { dh = h; dw = h * ir; dx = (w - dw) / 2 }
-    else         { dw = w; dh = w / ir; dy = (h - dh) / 2 }
-    ctx.drawImage(img, dx, dy, dw, dh)
+
+    if (fit === 'fill') {
+      ctx.drawImage(img, 0, 0, w, h)
+      return
+    }
+
+    // cover crops the overflowing axis; contain shrinks to show everything.
+    const wide = fit === 'cover' ? ir > cr : ir < cr
+    let dw: number, dh: number
+    if (wide) { dh = h; dw = h * ir } else { dw = w; dh = w / ir }
+    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh)
   }, 4)
 }
 
@@ -292,6 +321,7 @@ interface MediaEngineState {
   // ── Generated sources (native palette — no external switcher needed) ──
   addColorSource:    (color: string, label?: string) => string
   addImageSource:    (file: File) => string
+  setSourceFit:      (id: string, fit: SourceFit) => void
   addCountdownSource:(minutes: number, label?: string) => string
   addClockSource:    () => string
   addTextSource:     (text: string, label?: string) => string
@@ -448,12 +478,21 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
     addImageSource: (file) => {
       const id = uid('image')
       const url = URL.createObjectURL(file)
-      _streams.set(id, createImageStream(url))
+      _fits.set(id, 'contain')
+      _streams.set(id, createImageStream(url, id))
       set(s => ({ sources: [...s.sources, {
         id, label: file.name.replace(/\.[^.]+$/, ''), type: 'image',
-        active: true, hasVideo: true, hasAudio: false,
+        active: true, hasVideo: true, hasAudio: false, fit: 'contain',
       }] }))
       return id
+    },
+
+    // Changing fit only mutates the map the draw loop reads, so the image
+    // re-fits on the very next frame with no stream teardown — the source stays
+    // on air through the change, which matters if it is already in program.
+    setSourceFit: (id, fit) => {
+      _fits.set(id, fit)
+      set(s => ({ sources: s.sources.map(x => x.id === id ? { ...x, fit } : x) }))
     },
 
     addCountdownSource: (minutes, label) => {

@@ -4,8 +4,10 @@ import { createIPCHandlers } from './ipc-handlers'
 import { createWindowManager } from './window-manager'
 import { registerSystemStats } from './system-stats'
 import { registerEncoder, shutdownEncoder } from './encoder'
-import { registerWhisper } from './whisper'
+import { registerWhisper, shutdownWhisperServer } from './whisper'
 import { registerLicensing } from './licensing'
+import { registerBible } from './bible'
+import { registerBibleApi } from './bibleApi'
 import { API_BASE_URL } from './config'
 import { AppStore } from './store'
 
@@ -33,6 +35,68 @@ const DEV_SERVER_URL =
 let mainWindow: BrowserWindow | null = null
 let stageDisplayWindow: BrowserWindow | null = null
 let confidenceMonitorWindow: BrowserWindow | null = null
+
+// The stage display is a separate renderer process with no shared JS memory,
+// so the only way it learns what's actually live is this relayed payload.
+// Cached so a stage window opened mid-service (or reopened after a crash)
+// shows current state immediately instead of sitting blank until the next
+// update fires.
+let lastStagePayload: unknown = null
+
+let bibleDisplayWindow: BrowserWindow | null = null
+let lastBiblePayload: unknown = null
+
+/**
+ * Open (or focus) the congregation-facing scripture window.
+ *
+ * Prefers a second display so it lands on the projector, but deliberately
+ * still opens on a single-monitor machine — an operator setting up before the
+ * projector is plugged in must be able to see and position it.
+ */
+function openBibleDisplay(): BrowserWindow {
+  if (bibleDisplayWindow && !bibleDisplayWindow.isDestroyed()) {
+    bibleDisplayWindow.focus()
+    return bibleDisplayWindow
+  }
+
+  const second = screen.getAllDisplays().find(d => d.id !== screen.getPrimaryDisplay().id)
+
+  bibleDisplayWindow = new BrowserWindow({
+    x: second?.bounds.x ?? undefined,
+    y: second?.bounds.y ?? undefined,
+    width: second?.bounds.width ?? 1280,
+    height: second?.bounds.height ?? 720,
+    backgroundColor: '#000000',
+    title: 'GloryCast — Scripture Display',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      // Chromium throttles unfocused windows to ~1Hz. This one is never
+      // focused during a service, and a throttled projector output would drop
+      // transitions on the congregation's screen.
+      backgroundThrottling: false,
+    },
+    fullscreen: !!second,
+    show: false,
+  })
+
+  if (DEV_SERVER_URL) {
+    bibleDisplayWindow.loadURL(`${DEV_SERVER_URL}#/bible-display`)
+  } else {
+    bibleDisplayWindow.loadFile(join(process.env.DIST!, 'renderer/index.html'), { hash: 'bible-display' })
+  }
+
+  bibleDisplayWindow.once('ready-to-show', () => {
+    bibleDisplayWindow?.show()
+    if (lastBiblePayload !== null) {
+      bibleDisplayWindow?.webContents.send('bible:display', lastBiblePayload)
+    }
+  })
+
+  bibleDisplayWindow.on('closed', () => { bibleDisplayWindow = null })
+  return bibleDisplayWindow
+}
 
 const store = new AppStore()
 const windowManager = createWindowManager()
@@ -118,7 +182,11 @@ function createStageDisplay(): BrowserWindow {
     })
   }
 
-  stageDisplayWindow.once('ready-to-show', () => stageDisplayWindow?.show())
+  stageDisplayWindow.once('ready-to-show', () => {
+    stageDisplayWindow?.show()
+    // Replay the last known state so a window opened mid-service isn't blank.
+    if (lastStagePayload !== null) stageDisplayWindow?.webContents.send('stage:update', lastStagePayload)
+  })
   return stageDisplayWindow
 }
 
@@ -172,26 +240,137 @@ async function bootstrap() {
   registerEncoder(() => mainWindow)
   registerWhisper()
   registerLicensing()
+  registerBible()
+  registerBibleApi(store)
   createMainWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
 
-  ipcMain.on('open-stage-display', () => {
-    if (!stageDisplayWindow || stageDisplayWindow.isDestroyed()) {
-      createStageDisplay()
-    } else {
-      stageDisplayWindow.focus()
-    }
+  ipcMain.on('open-stage-display', () => openStageDisplay())
+  ipcMain.on('close-stage-display', () => closeStageDisplay())
+
+  // Relay live stage content from the main window's renderer to the
+  // stage-display window's renderer — the two are separate processes with no
+  // shared JS state, so this IPC hop is the only path between them.
+  ipcMain.on('stage:update', (_event, payload) => {
+    lastStagePayload = payload
+    stageDisplayWindow?.webContents.send('stage:update', payload)
   })
 
-  ipcMain.on('close-stage-display', () => {
-    stageDisplayWindow?.close()
-    stageDisplayWindow = null
+  ipcMain.on('open-bible-display', () => openBibleDisplay())
+  ipcMain.on('close-bible-display', () => {
+    bibleDisplayWindow?.close()
+    bibleDisplayWindow = null
   })
 
-  Menu.setApplicationMenu(null)
+  // Congregation-facing scripture output. Same relay shape as the stage
+  // display: separate renderer, no shared state, last payload cached so a
+  // window opened mid-service shows what is already live.
+  ipcMain.on('bible:display', (_event, payload) => {
+    lastBiblePayload = payload
+    bibleDisplayWindow?.webContents.send('bible:display', payload)
+  })
+
+  Menu.setApplicationMenu(buildAppMenu())
+}
+
+function openStageDisplay(): void {
+  if (!stageDisplayWindow || stageDisplayWindow.isDestroyed()) {
+    createStageDisplay()
+  } else {
+    stageDisplayWindow.focus()
+  }
+}
+
+function closeStageDisplay(): void {
+  stageDisplayWindow?.close()
+  stageDisplayWindow = null
+}
+
+/**
+ * The app menu was previously stripped entirely (`setApplicationMenu(null)`),
+ * which meant no Restart, no Exit, no way to reopen a DevTools window you
+ * closed, and no keyboard-accessible path to the stage display — everything
+ * had to go through the in-app UI. This restores a conventional menu bar in
+ * the shape a broadcast operator would expect from vMix or similar switcher
+ * software: File for session/lifecycle actions, Edit/View for the standard
+ * OS-level affordances, Output for the second-monitor windows, Help for
+ * support links.
+ */
+function buildAppMenu(): Menu {
+  const isMac = process.platform === 'darwin'
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Restart GloryCast',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => { app.relaunch(); app.quit() },
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { label: 'Exit', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Output',
+      submenu: [
+        {
+          label: 'Open Scripture Display',
+          accelerator: 'CmdOrCtrl+Shift+B',
+          click: () => openBibleDisplay(),
+        },
+        {
+          label: 'Close Scripture Display',
+          click: () => { bibleDisplayWindow?.close(); bibleDisplayWindow = null },
+        },
+        { type: 'separator' },
+        { label: 'Open Stage Display', click: () => openStageDisplay() },
+        { label: 'Close Stage Display', click: () => closeStageDisplay() },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        ...(isMac ? [{ role: 'zoom' } as const, { type: 'separator' } as const, { role: 'front' } as const] : []),
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'GloryCast Support',
+          click: () => shell.openExternal('https://glorycast.ai/support'),
+        },
+        { label: 'About GloryCast', click: () => app.showAboutPanel() },
+      ],
+    },
+  ]
+
+  return Menu.buildFromTemplate(template)
 }
 
 app.on('window-all-closed', () => {
@@ -203,6 +382,9 @@ app.on('window-all-closed', () => {
 // still-live stream long after the operator has closed GloryCast.
 app.on('before-quit', (event) => {
   event.preventDefault()
+  // The Whisper server is a detached child like FFmpeg; without this it
+  // outlives the app and keeps the model resident in RAM.
+  shutdownWhisperServer()
   void shutdownEncoder().finally(() => app.exit(0))
 })
 

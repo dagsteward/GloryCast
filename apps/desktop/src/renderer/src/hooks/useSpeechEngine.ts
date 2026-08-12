@@ -213,6 +213,21 @@ export function useSpeechEngine({
             engine: 'none', listening: false, speaking: false, ready: false,
             detail: 'Microphone permission denied.',
           })
+          return
+        }
+        // Electron ships without the Google API credentials stock Chrome has,
+        // so the online recognition service is unreachable and every attempt
+        // fails with 'network' — immediately, and forever, not intermittently.
+        // Left unhandled here, the status kept claiming listening: true while
+        // silently transcribing nothing, which is exactly what looked like
+        // "voice detection isn't hearing the speaker" with no error to explain
+        // why. Give up loudly instead of retrying a request that can't work.
+        if (event.error === 'network') {
+          active = false
+          setStatus({
+            engine: 'none', listening: false, speaking: false, ready: false,
+            detail: 'Online recognition isn’t available in the desktop app. Install a local Whisper model in Settings → AI Services for voice detection.',
+          })
         }
       }
 

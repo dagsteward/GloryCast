@@ -32,3 +32,12 @@ packages/bible-engine/*.mdw
 # tsc occasionally emits alongside sources; never commit compiled output there
 packages/*/src/**/*.js
 packages/*/src/**/*.js.map
+
+# Whisper.cpp binaries — machine-specific, resolved at runtime via
+# GLORYCAST_WHISPER_PATH or the system PATH. Not redistributed with the repo.
+whisper/
+
+# Local scratch
+prisma-test.mjs
+run-backend.mjs
+swagger2.json

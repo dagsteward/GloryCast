@@ -86,6 +86,13 @@ interface AppState {
   /** Whisper model id, e.g. "base.en". */
   asrModel: string
 
+  /**
+   * Translation scripture is projected in unless the speaker names another one
+   * aloud. Defaults to NIV — what most congregations read from — but only
+   * resolves if the church has added that translation to its own library.
+   */
+  bibleTranslation: string
+
   // UI
   aiPanelOpen:      boolean
   connectionStatus: 'connected' | 'disconnected' | 'connecting'
@@ -100,6 +107,7 @@ interface AppState {
   setDestinations: (d: StreamDestination[]) => void
   setAsrDevice: (id: string) => void
   setAsrModel: (id: string) => void
+  setBibleTranslation: (id: string) => void
   updateDestination: (id: string, patch: Partial<StreamDestination>) => void
   setProgramSource: (id: string) => void
   setPreviewSource: (id: string) => void
@@ -173,7 +181,8 @@ export const useAppStore = create<AppState>()(
         lastServiceDate: new Date(Date.now() - 7 * 86400000).toISOString(),
 
         asrDeviceId: '',
-        asrModel: 'base.en',
+        asrModel: 'tiny.en',
+        bibleTranslation: 'NIV',
 
         // Song library
         songLibrary: [],
@@ -192,6 +201,7 @@ export const useAppStore = create<AppState>()(
         setDestinations: (d) => set({ destinations: d }),
         setAsrDevice: (id) => set({ asrDeviceId: id }),
         setAsrModel: (id) => set({ asrModel: id }),
+        setBibleTranslation: (id) => set({ bibleTranslation: id }),
         updateDestination: (id, patch) => set(s => ({
           destinations: s.destinations.map(d => d.id === id ? { ...d, ...patch } : d),
         })),
@@ -260,6 +270,9 @@ export const useAppStore = create<AppState>()(
           upcomingService: s.upcomingService,
           lastServiceDate: s.lastServiceDate,
           songLibrary: s.songLibrary,
+          bibleTranslation: s.bibleTranslation,
+          asrModel: s.asrModel,
+          asrDeviceId: s.asrDeviceId,
         }),
       },
     ),

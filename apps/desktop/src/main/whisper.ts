@@ -1,4 +1,4 @@
-import { spawn } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import { app, ipcMain } from 'electron'
 import { existsSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from 'fs'
 import { join } from 'path'
@@ -58,7 +58,27 @@ function resolveBinary(): string | null {
   const bundled = join(process.resourcesPath ?? '', 'whisper', binaryName())
   if (existsSync(bundled)) return bundled
 
+  const onPath = resolveFromPath(binaryName())
+  if (onPath) return onPath
+
   return null
+}
+
+/**
+ * Look up a binary on the system PATH. Node has no built-in equivalent of
+ * `which`/`where` — `spawnSync` with `shell: true` lets the OS's own shell
+ * resolve it exactly as a user's terminal would, including on Windows where
+ * PATHEXT resolution (`.exe`, `.cmd`, etc.) isn't otherwise straightforward.
+ */
+function resolveFromPath(name: string): string | null {
+  try {
+    const cmd = process.platform === 'win32' ? `where ${name}` : `command -v ${name}`
+    const result = spawnSync(cmd, { shell: true, encoding: 'utf8' })
+    const found = result.stdout?.split(/\r?\n/).map(l => l.trim()).find(Boolean)
+    return found && existsSync(found) ? found : null
+  } catch {
+    return null
+  }
 }
 
 function binaryName(): string {
@@ -107,6 +127,117 @@ export function checkAvailability(): WhisperAvailability {
   return { ready: true, binary, installedModels, detail: 'Local transcription ready.' }
 }
 
+// ─── Persistent server ───────────────────────────────────────────────────────
+// whisper-cli loads the model from disk on every invocation. At ~142 MB for
+// base.en that is one to three seconds of startup before a single word is
+// transcribed — per utterance. Over a sermon that is the difference between
+// scripture appearing while the verse is still being read and appearing after
+// the preacher has moved on, and it is why slow utterances hit the timeout and
+// vanished entirely.
+//
+// whisper-server loads the model once and stays resident, so each utterance
+// costs only inference. We fall back to the CLI when the server binary is
+// missing, so an older whisper.cpp build still works.
+
+const SERVER_PORT = 8178
+const SERVER_HOST = '127.0.0.1'
+
+let _server: import('child_process').ChildProcess | null = null
+let _serverModel: string | null = null
+let _serverReady: Promise<boolean> | null = null
+
+function serverBinary(): string | null {
+  const cli = resolveBinary()
+  if (!cli) return null
+  const candidate = cli.replace(/whisper-cli(\.exe)?$/i, (_m, ext) => `whisper-server${ext ?? ''}`)
+  return candidate !== cli && existsSync(candidate) ? candidate : null
+}
+
+export function shutdownWhisperServer(): void {
+  if (_server && !_server.killed) {
+    try { _server.kill() } catch { /* already gone */ }
+  }
+  _server = null
+  _serverModel = null
+  _serverReady = null
+}
+
+/** Start (or reuse) the server for `model`. Resolves false when unavailable. */
+function ensureServer(model: string): Promise<boolean> {
+  // A different model means the resident one is wrong — restart rather than
+  // silently transcribing with whatever was loaded first.
+  if (_server && _serverModel !== model) shutdownWhisperServer()
+  if (_serverReady) return _serverReady
+
+  const binary = serverBinary()
+  const modelFile = modelPath(model)
+  if (!binary || !existsSync(modelFile)) return Promise.resolve(false)
+
+  _serverReady = new Promise<boolean>((resolve) => {
+    try {
+      _server = spawn(binary, [
+        '-m', modelFile,
+        '--host', SERVER_HOST,
+        '--port', String(SERVER_PORT),
+        '-t', String(Math.max(1, Math.floor((navigatorHardware() || 4) / 2))),
+      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      _serverModel = model
+
+      _server.on('error', () => { shutdownWhisperServer(); resolve(false) })
+      _server.on('exit', () => { _server = null; _serverModel = null; _serverReady = null })
+
+      // Poll until it answers rather than guessing a fixed delay — model load
+      // time varies hugely between base.en and a large model.
+      const deadline = Date.now() + 60_000
+      const probe = async () => {
+        if (Date.now() > deadline) { shutdownWhisperServer(); resolve(false); return }
+        try {
+          const res = await fetch(`http://${SERVER_HOST}:${SERVER_PORT}/`, { method: 'GET' })
+          if (res.status < 500) { resolve(true); return }
+        } catch { /* not up yet */ }
+        setTimeout(probe, 400)
+      }
+      setTimeout(probe, 400)
+    } catch {
+      shutdownWhisperServer()
+      resolve(false)
+    }
+  })
+
+  return _serverReady
+}
+
+/** Transcribe via the resident server. Returns null when it cannot be used. */
+async function transcribeViaServer(
+  wav: ArrayBuffer, options: WhisperOptions,
+): Promise<WhisperResult | null> {
+  if (!(await ensureServer(options.model))) return null
+
+  const started = Date.now()
+  try {
+    const form = new FormData()
+    form.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav')
+    form.append('response_format', 'json')
+    form.append('language', 'en')
+    form.append('temperature', '0')
+    if (options.prompt) form.append('prompt', options.prompt)
+
+    const res = await fetch(`http://${SERVER_HOST}:${SERVER_PORT}/inference`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!res.ok) return null
+
+    const json: any = await res.json()
+    const cleaned = cleanTranscript(String(json?.text ?? ''))
+    if (!cleaned) return null
+
+    return { text: cleaned, elapsedSec: (Date.now() - started) / 1000 }
+  } catch {
+    return null
+  }
+}
+
 /** Transcribe one WAV buffer. Resolves to null when nothing intelligible. */
 async function transcribe(wav: ArrayBuffer, options: WhisperOptions): Promise<WhisperResult | null> {
   const availability = checkAvailability()
@@ -114,6 +245,11 @@ async function transcribe(wav: ArrayBuffer, options: WhisperOptions): Promise<Wh
 
   const model = modelPath(options.model)
   if (!existsSync(model)) return null
+
+  // Resident server first — no model reload, so this is the fast path. Falls
+  // through to the CLI when whisper-server is absent or failed to start.
+  const viaServer = await transcribeViaServer(wav, options)
+  if (viaServer) return viaServer
 
   // whisper.cpp reads from disk; a temp file per utterance is cheap and avoids
   // any stdin framing ambiguity.
@@ -135,6 +271,12 @@ async function transcribe(wav: ArrayBuffer, options: WhisperOptions): Promise<Wh
         '--threads', String(options.threads ?? Math.max(1, Math.floor((navigatorHardware() || 4) / 2))),
         // Suppress the "[BLANK_AUDIO]" style markers whisper emits on silence.
         '--no-prints',
+        // whisper.cpp defaults to beam search (width 5) with temperature
+        // fallback, which is noticeably slower on CPU than greedy decoding.
+        // This is live scripture detection, not a transcript for the record —
+        // matches go through fuzzy/regex lookup afterward, so exact wording
+        // barely matters and latency matters a lot.
+        '--beam-size', '1', '--best-of', '1',
       ]
 
       const proc = spawn(availability.binary as string, args, { stdio: ['ignore', 'pipe', 'pipe'] })

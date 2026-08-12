@@ -83,10 +83,12 @@ export function TopBar() {
           <span className="text-[11.5px] font-mono tabular-nums text-white/75">{clock}</span>
         </motion.div>
 
+        {/* Sub-10% CPU keeps a decimal so a light-but-real load reads as
+            "2.4%" instead of an alarming-looking flat "0%". */}
         <Vital
           icon={<Cpu size={12} />}
           label="CPU"
-          value={available ? `${cpu}%` : '—'}
+          value={available ? `${cpu < 10 ? cpu.toFixed(1) : Math.round(cpu)}%` : '—'}
           tone={cpu > 85 ? 'danger' : cpu > 65 ? 'warn' : 'normal'}
         />
 
@@ -97,10 +99,12 @@ export function TopBar() {
           tone="normal"
         />
 
+        {/* "Excellent" implied a measured link quality that was never sampled —
+            we only know whether an interface exists. */}
         <Vital
           icon={online ? <Wifi size={12} /> : <WifiOff size={12} />}
           label="Internet"
-          value={online ? 'Excellent' : 'Offline'}
+          value={online ? 'Online' : 'Offline'}
           tone={online ? 'good' : 'danger'}
         />
       </div>

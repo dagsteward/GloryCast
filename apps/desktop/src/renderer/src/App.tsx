@@ -9,6 +9,7 @@ import { EngagementPage } from './pages/Engagement'
 import { AiStudioPage } from './pages/AiStudio'
 import { SettingsPage } from './pages/Settings'
 import { StageDisplayPage } from './pages/StageDisplay'
+import { BibleDisplayPage } from './pages/BibleDisplay'
 import { BiblePage } from './pages/Bible'
 import { AnalyticsPage } from './pages/Analytics'
 import { ModulePlaceholder } from './pages/ModulePlaceholder'
@@ -22,6 +23,9 @@ export function App() {
         <Routes>
           {/* Stage display runs fullscreen on second monitor */}
           <Route path="/stage-display" element={<StageDisplayPage />} />
+          {/* Congregation-facing scripture projection — outside MainLayout so
+              it carries no app chrome onto the projector. */}
+          <Route path="/bible-display" element={<BibleDisplayPage />} />
 
           {/* Main app shell — every page shares the brand rail, top bar and
               status bar, Production included. */}

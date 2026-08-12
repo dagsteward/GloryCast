@@ -12,6 +12,7 @@ import { WorkspacePicker } from '../components/settings/WorkspacePicker'
 import { useAppStore } from '../stores/appStore'
 import { useServiceStore } from '../stores/serviceStore'
 import { WHISPER_MODELS } from '@glorycast/ai-core'
+import { Attributions } from '../components/settings/Attributions'
 
 type SettingsSection = 'general' | 'audio-video' | 'streaming' | 'ai' | 'bible' | 'appearance' | 'security'
 
@@ -633,26 +634,282 @@ function StreamingSettings() {
 
 // ─── Bible settings ───────────────────────────────────────────────────────────
 
+/** A translation available to project from — bundled or user-added. */
+interface LibraryEntry {
+  id: string
+  name: string
+  copyright: string
+  bundled: boolean
+  removable: boolean
+}
+
+/** Public-domain text that ships inside GloryCast and always works offline. */
+const BUNDLED_ENTRIES: LibraryEntry[] = [
+  { id: 'WEB', name: 'World English Bible', copyright: 'Public domain', bundled: true, removable: false },
+  { id: 'KJV', name: 'King James Version (1769)', copyright: 'Public domain', bundled: true, removable: false },
+]
+
 function BibleSettings() {
-  const [defaultTranslation,   setDefaultTranslation]   = useState('NIV')
-  const [secondaryTranslation, setSecondaryTranslation] = useState('KJV')
+  const bibleTranslation = useAppStore(s => s.bibleTranslation)
+  const setBibleTranslation = useAppStore(s => s.setBibleTranslation)
+
+  const [library, setLibrary] = useState<LibraryEntry[]>(BUNDLED_ENTRIES)
+  const [libraryDir, setLibraryDir] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+
+  const [apiKey, setApiKey] = useState('')
+  const [apiConfigured, setApiConfigured] = useState(false)
+  const [apiCount, setApiCount] = useState(0)
+
+  const refreshApi = async () => {
+    const status = await window.glorycast?.bibleApi?.keyStatus().catch(() => null)
+    setApiConfigured(Boolean(status?.configured))
+    if (status?.configured) {
+      const list = await window.glorycast?.bibleApi?.list().catch(() => [])
+      setApiCount(list?.length ?? 0)
+      setCatalogue(list ?? [])
+    }
+  }
+
+  const onSaveKey = async () => {
+    await window.glorycast?.bibleApi?.setKey(apiKey.trim())
+    setApiKey('')
+    await refreshApi()
+  }
+
+  const [catalogue, setCatalogue] = useState<Array<{
+    id: string; abbreviation: string; name: string; language: string; isPublicDomain: boolean
+  }>>([])
+  const [search, setSearch] = useState('')
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [progress, setProgress] = useState<Record<string, { done: number; total: number }>>({})
+
+  useEffect(() => {
+    const onProgress = (p: unknown) => {
+      const { bibleId, done, total } = p as { bibleId: string; done: number; total: number }
+      setProgress(prev => ({ ...prev, [bibleId]: { done, total } }))
+    }
+    window.glorycast?.on('bibleapi:progress', onProgress)
+    return () => window.glorycast?.off('bibleapi:progress', onProgress)
+  }, [])
+
+  const matches = (() => {
+    const q = search.trim().toLowerCase()
+    if (q.length < 2) return []
+    return catalogue
+      .filter(b => b.abbreviation.toLowerCase().includes(q) || b.name.toLowerCase().includes(q))
+      .slice(0, 25)
+  })()
+
+  const onInstall = async (b: { id: string; abbreviation: string; name: string }) => {
+    setDownloading(b.abbreviation); setNote(null)
+    try {
+      const res = await window.glorycast?.bibleApi?.download({
+        bibleId: b.id, abbreviation: b.abbreviation, name: b.name,
+      })
+      setNote(res?.ok
+        ? `Installed ${b.abbreviation} — ${res.verses?.toLocaleString()} verses, available offline.`
+        : res?.error ?? `Could not install ${b.abbreviation}.`)
+      await refresh()
+    } finally {
+      setDownloading(null)
+      setProgress(prev => { const n = { ...prev }; delete n[b.id]; return n })
+    }
+  }
+
+  const refresh = async () => {
+    const added = await window.glorycast?.bible?.list().catch(() => []) ?? []
+    setLibrary([
+      ...BUNDLED_ENTRIES,
+      ...added.map(t => ({ ...t, bundled: false })),
+    ])
+  }
+
+  useEffect(() => {
+    void refresh()
+    void refreshApi()
+    void window.glorycast?.bible?.libraryDir().then(setLibraryDir).catch(() => {})
+  }, [])
+
+  const onImport = async () => {
+    setBusy(true); setNote(null)
+    try {
+      const res = await window.glorycast?.bible?.import()
+      if (res?.added.length) setNote(`Added ${res.added.join(', ')}.`)
+      else if (res?.failed?.length) setNote(`Could not read: ${res.failed.join(', ')}.`)
+      await refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onRemove = async (id: string) => {
+    await window.glorycast?.bible?.remove(id)
+    if (bibleTranslation === id) setBibleTranslation('WEB')
+    await refresh()
+  }
+
+  const desktopOnly = !window.glorycast?.bible
 
   return (
     <div>
-      <SectionHeader title="Bible Engine" description="Configure Bible translations and display preferences" />
+      <SectionHeader title="Bible Engine" description="Translations available for projection and voice detection" />
+
+      {/* The product ships public-domain text only. Anything else is text the
+          church already licenses, added here by the operator — so the app never
+          redistributes scripture it has no right to. */}
+      <div className="mb-5 p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+        <p className="text-sm text-white/85 font-semibold mb-1">Add your own translations</p>
+        <p className="text-xs text-white/50 leading-relaxed mb-3">
+          GloryCast includes the public-domain WEB and KJV. Copyrighted translations
+          (NIV, ESV, NKJV, NLT…) are licensed to your church, not to GloryCast, so you
+          add them here from files you own — the same way ProPresenter and EasyWorship work.
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onImport}
+            disabled={busy || desktopOnly}
+            className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+          >{busy ? 'Adding…' : 'Add Translation…'}</button>
+          {libraryDir && (
+            <button
+              onClick={() => window.glorycast?.shell.openPath(libraryDir)}
+              className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/10 text-white/70 text-sm transition-colors"
+            >Open Library Folder</button>
+          )}
+        </div>
+        {desktopOnly && (
+          <p className="text-[11px] text-amber-300 mt-2">
+            Adding translations requires the GloryCast desktop app.
+          </p>
+        )}
+        {note && <p className="text-[11px] text-white/60 mt-2">{note}</p>}
+      </div>
+
+      {/* API.Bible — the operator's own key against the American Bible Society
+          catalogue. This is how GloryCast reaches thousands of translations
+          (including a large free set) without shipping any of them. */}
+      <div className="mb-5 p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-sm text-white/85 font-semibold">Online translations (API.Bible)</p>
+          {apiConfigured && <span className="text-[9px] font-bold uppercase text-emerald-400">Connected</span>}
+        </div>
+        <p className="text-xs text-white/50 leading-relaxed mb-3">
+          Adds 2,500+ translations from the American Bible Society, including many free
+          public-domain ones. Free key, and it stays on this machine.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder="API.Bible key"
+            className="flex-1 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-purple-500/40"
+          />
+          <button
+            onClick={onSaveKey}
+            disabled={!apiKey.trim() || desktopOnly}
+            className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+          >Save</button>
+          <button
+            onClick={() => window.glorycast?.shell.openExternal('https://scripture.api.bible/')}
+            className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/10 text-white/70 text-sm transition-colors"
+          >Get a key</button>
+        </div>
+        {apiCount > 0 && (
+          <p className="text-[11px] text-emerald-300/80 mt-2">{apiCount} online translations available.</p>
+        )}
+
+        {apiConfigured && (
+          <div className="mt-3 pt-3 border-t border-white/[0.06]">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search translations to install… e.g. ASV, Young's"
+              className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/25 outline-none focus:border-purple-500/40"
+            />
+            {search.trim().length > 1 && (
+              <div className="mt-2 max-h-60 overflow-y-auto space-y-1">
+                {matches.length === 0 && <p className="text-[11px] text-white/40 px-1 py-2">No match.</p>}
+                {matches.map(b => {
+                  const installed = library.some(t => t.id === b.abbreviation.toUpperCase())
+                  const prog = progress[b.id]
+                  return (
+                    <div key={b.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.03]">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11.5px] text-white/80 truncate">
+                          <span className="font-bold text-purple-300">{b.abbreviation}</span> — {b.name}
+                        </div>
+                        <div className="text-[9.5px] text-white/35">{b.language}</div>
+                      </div>
+                      {installed ? (
+                        <span className="text-[9px] font-semibold uppercase text-emerald-400 shrink-0">Installed</span>
+                      ) : prog ? (
+                        <span className="text-[9.5px] font-mono text-purple-300 shrink-0 tabular-nums">
+                          {Math.round((prog.done / prog.total) * 100)}%
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => onInstall(b)}
+                          disabled={downloading !== null}
+                          className="px-2.5 py-1 rounded-md bg-purple-600 hover:bg-purple-500 disabled:opacity-30 text-[10px] font-semibold text-white shrink-0 transition-colors"
+                        >Install</button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {/* Downloading a whole translation is ~1,190 requests, so it is worth
+                telling the operator this is a one-time cost, not a stall. */}
+            {downloading && (
+              <p className="text-[11px] text-white/55 mt-2">
+                Installing {downloading} — this takes a few minutes and only happens once.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-0">
-        <SettingRow label="Default Translation" description="Primary Bible translation for display">
-          <select value={defaultTranslation} onChange={e => setDefaultTranslation(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none">
-            {['NIV','ESV','KJV','NKJV','NLT','NASB'].map(t => <option key={t}>{t}</option>)}
+        <SettingRow label="Default Translation" description="Used until a speaker names another version aloud">
+          <select
+            value={bibleTranslation}
+            onChange={e => setBibleTranslation(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none w-52"
+          >
+            {/* NIV stays selectable even when absent so the preference survives
+                until the church adds the file — it just falls back to bundled
+                text meanwhile rather than projecting nothing. */}
+            {!library.some(t => t.id === bibleTranslation) && (
+              <option value={bibleTranslation}>{bibleTranslation} (not installed)</option>
+            )}
+            {library.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
           </select>
         </SettingRow>
-        <SettingRow label="Secondary Translation" description="Shown alongside primary translation">
-          <select value={secondaryTranslation} onChange={e => setSecondaryTranslation(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/70 outline-none">
-            {['None','NIV','ESV','KJV','NKJV','NLT','NASB'].map(t => <option key={t}>{t}</option>)}
-          </select>
-        </SettingRow>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[11px] uppercase tracking-wider text-white/40 mb-2">
+          Installed ({library.length})
+        </p>
+        <div className="space-y-1.5">
+          {library.map(t => (
+            <div key={t.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+              <span className="text-[11px] font-bold text-purple-300 w-12 shrink-0">{t.id}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-white/80 truncate">{t.name}</div>
+                {t.copyright && <div className="text-[10px] text-white/40 truncate">© {t.copyright}</div>}
+              </div>
+              {t.bundled
+                ? <span className="text-[9px] font-semibold uppercase text-emerald-400/80 shrink-0">Included</span>
+                : t.removable
+                  ? <button onClick={() => onRemove(t.id)} className="text-[10px] text-white/40 hover:text-red-400 shrink-0">Remove</button>
+                  : <span className="text-[9px] uppercase text-white/30 shrink-0">Linked</span>}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -682,6 +939,16 @@ function GeneralSettings() {
         <SettingRow label="Start on boot" description="Launch GloryCast when Windows starts">
           <Toggle value={startOnBoot} onChange={setStartOnBoot} />
         </SettingRow>
+      </div>
+
+      {/* CC-BY and CC-BY-SA make visible attribution a condition of use, so
+          this has to ship in the product rather than live only in the repo. */}
+      <div className="mt-8">
+        <SectionHeader
+          title="Data & Attributions"
+          description="Third-party data included in GloryCast, and its licences"
+        />
+        <Attributions />
       </div>
     </div>
   )

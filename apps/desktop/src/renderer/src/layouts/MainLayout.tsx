@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from '../components/shell/Sidebar'
 import { TopBar } from '../components/shell/TopBar'
@@ -10,6 +11,8 @@ import { useAppStore } from '../stores/appStore'
 import { useWorkspace } from '../stores/workspaceStore'
 import { useWorkspaceTheme } from '../hooks/useWorkspaceTheme'
 import { useAiCopilot } from '../hooks/useAiCopilot'
+import { useConnectionStatus } from '../hooks/useConnectionStatus'
+import { primeApiBibleIds } from '../lib/aiDetect'
 
 /**
  * The app shell. Which chrome renders is decided entirely by the active
@@ -26,6 +29,13 @@ export function MainLayout() {
   // Always-listening AI engine — runs once for the whole app. While a service
   // is live, it feeds scripture + song detections into the shared serviceStore.
   useAiCopilot()
+
+  // Keeps the status bar's Internet indicator tied to the real network.
+  useConnectionStatus()
+
+  // Index the operator's API.Bible catalogue once so voice-detected verses can
+  // resolve against online translations without a per-verse lookup round trip.
+  useEffect(() => { void primeApiBibleIds() }, [])
 
   const content = (
     <main className="flex-1 overflow-hidden relative">

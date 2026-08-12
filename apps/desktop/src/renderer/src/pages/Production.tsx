@@ -6,13 +6,13 @@ import {
   SlidersHorizontal, Play, Radio, MonitorSmartphone, Settings, Plus,
   LayoutGrid, List, Eye, ThumbsUp, Clock, Mic, Brain, Send,
   RotateCw, Pause, Circle, Link2, ChevronRight, ChevronLeft,
-  Camera, Monitor, Palette, Timer as TimerIcon, X, Trash2,
+  Camera, Monitor, Palette, Timer as TimerIcon, X, Trash2, Maximize2,
 } from 'lucide-react'
 import {
   useCompositor, useProgramCanvas, usePreviewCanvas,
   type CompositorController,
 } from '../hooks/useCompositor'
-import { useMediaEngine, getStream, type SourceType, type NetworkProtocol } from '../hooks/useMediaEngine'
+import { useMediaEngine, getStream, type SourceType, type NetworkProtocol, type SourceFit } from '../hooks/useMediaEngine'
 import { useServiceStore } from '../stores/serviceStore'
 import { AsrEngineBadge } from '../components/ai/AsrEngineBadge'
 import { useAppStore } from '../stores/appStore'
@@ -129,6 +129,20 @@ export function ProductionPage() {
   const [stageGraphic, setStageGraphic] = useState<Graphic | null>(null)
   const [streaming, setStreaming] = useState(false)
 
+  // The stage-display window is a separate Electron renderer process with no
+  // shared JS state — this is the only path by which it learns what's
+  // actually on stage. Runs on every change so a producer pushing/clearing a
+  // verse updates the confidence monitor live, same as the in-app preview.
+  useEffect(() => {
+    window.glorycast?.stage.send({
+      body: stageGraphic?.text ?? null,
+      reference: stageGraphic?.ref ?? null,
+      translation: stageGraphic?.translation ?? null,
+      nextUp: null,
+      notes: null,
+    })
+  }, [stageGraphic])
+
   // The GPU compositor produces the actual program frame. The live graphic is
   // passed in so scripture is composited into the output rather than being a
   // DOM overlay the stream would never see.
@@ -154,7 +168,7 @@ function Panel({ title, right, children, className }: {
   title?: string; right?: React.ReactNode; children: React.ReactNode; className?: string
 }) {
   return (
-    <section className={cn('rounded-xl bg-[#0c0c15] border border-white/[0.06] flex flex-col min-h-0', className)}>
+    <section className={cn('rounded-xl bg-chrome border border-white/[0.06] flex flex-col min-h-0', className)}>
       {title && (
         <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-white/[0.05]">
           <h3 className="text-[12px] font-semibold tracking-wide text-white/75 uppercase">{title}</h3>
@@ -204,7 +218,7 @@ function ProgramMonitor({ elapsed, streaming, graphic, clearGraphic }: {
 
   return (
     <div className={cn('rounded-xl overflow-hidden border bg-black flex flex-col', streaming ? 'border-red-500/40' : 'border-white/10')}>
-      <div className="flex items-center justify-between px-3 h-8 bg-[#0c0c15] border-b border-white/[0.05]">
+      <div className="flex items-center justify-between px-3 h-8 bg-chrome border-b border-white/[0.05]">
         <span className="flex items-center gap-2 text-[12px] font-bold">
           <span className={cn('w-2 h-2 rounded-full', streaming ? 'live-dot bg-red-500' : 'bg-white/30')} />
           <span className={streaming ? 'text-red-400' : 'text-white/60'}>PROGRAM</span>
@@ -234,7 +248,7 @@ function ProgramMonitor({ elapsed, streaming, graphic, clearGraphic }: {
           </button>
         )}
       </div>
-      <div className="flex items-center gap-4 px-3 h-9 bg-[#0c0c15] text-[11px]">
+      <div className="flex items-center gap-4 px-3 h-9 bg-chrome text-[11px]">
         {streaming
           ? <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-600 text-white font-bold"><Circle size={7} className="fill-white" /> LIVE</span>
           : <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/10 text-white/50 font-bold">OFF AIR</span>}
@@ -283,7 +297,7 @@ function PreviewMonitor({ compositor }: { compositor: CompositorController }) {
 
   return (
     <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-black flex flex-col">
-      <div className="flex items-center justify-between px-3 h-8 bg-[#0c0c15] border-b border-white/[0.05]">
+      <div className="flex items-center justify-between px-3 h-8 bg-chrome border-b border-white/[0.05]">
         <span className="text-[12px] font-bold text-emerald-300/90">PREVIEW</span>
         <span className="text-[11px] text-white/40 font-mono truncate max-w-[110px]">{prev?.label ?? '—'}</span>
       </div>
@@ -298,7 +312,7 @@ function PreviewMonitor({ compositor }: { compositor: CompositorController }) {
         )}
       </div>
 
-      <div className="px-3 py-2.5 bg-[#0c0c15] space-y-2.5">
+      <div className="px-3 py-2.5 bg-chrome space-y-2.5">
         <div className="grid grid-cols-4 gap-1.5">
           {TRANSITIONS.map(t => (
             <button
@@ -372,6 +386,7 @@ function SourcesPanel() {
   const assignToPreview = useMediaEngine(s => s.assignToPreview)
   const assignToProgram = useMediaEngine(s => s.assignToProgram)
   const removeSource    = useMediaEngine(s => s.removeSource)
+  const setSourceFit    = useMediaEngine(s => s.setSourceFit)
 
   const [tab, setTab] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -441,31 +456,38 @@ function SourcesPanel() {
   }
 
   return (
-    <Panel className="bg-[#0c0c15]">
-      <div className="flex items-center gap-1 px-3 h-10 border-b border-white/[0.05] overflow-x-auto">
-        {CATEGORIES.map((c, i) => (
-          <button
-            key={c.label}
-            onClick={() => setTab(i)}
-            className={cn(
-              'px-2.5 py-1 rounded-md text-[10.5px] font-semibold tracking-wide whitespace-nowrap transition-colors',
-              // white/40 on this panel's near-black background sits around a
-              // 2.5:1 contrast ratio — well under WCAG AA's 4.5:1 floor for
-              // normal text, which is exactly why these tabs (ALL SOURCES,
-              // VIDEO, MEDIA…) were unreadable until clicked into their
-              // higher-contrast active state.
-              tab === i ? 'text-purple-300 bg-purple-600/15' : 'text-white/65 hover:text-white/90',
-            )}
-          >{c.label}</button>
-        ))}
-        <div className="ml-auto relative flex items-center gap-2">
+    <Panel className="bg-chrome">
+      <div className="flex items-center gap-1 px-3 h-10 border-b border-white/[0.05]">
+        {/* Only the tab strip scrolls horizontally. It used to own overflow-x-auto
+            directly on this row, but CSS forces overflow-y to clip too whenever
+            overflow-x is non-visible — that silently clipped the absolutely
+            positioned Add Source dropdown below, which sits in this same row.
+            Scoping the scroll to just the tabs keeps the dropdown unclipped. */}
+        <div className="flex items-center gap-1 overflow-x-auto min-w-0">
+          {CATEGORIES.map((c, i) => (
+            <button
+              key={c.label}
+              onClick={() => setTab(i)}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-[10.5px] font-semibold tracking-wide whitespace-nowrap transition-colors',
+                // white/40 on this panel's near-black background sits around a
+                // 2.5:1 contrast ratio — well under WCAG AA's 4.5:1 floor for
+                // normal text, which is exactly why these tabs (ALL SOURCES,
+                // VIDEO, MEDIA…) were unreadable until clicked into their
+                // higher-contrast active state.
+                tab === i ? 'text-purple-300 bg-purple-600/15' : 'text-white/65 hover:text-white/90',
+              )}
+            >{c.label}</button>
+          ))}
+        </div>
+        <div className="ml-auto relative flex items-center gap-2 shrink-0">
           <button onClick={() => setMenuOpen(o => !o)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-600/80 hover:bg-purple-600 text-[11px] font-medium text-white">
             <Plus size={12} /> Add Source
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => reveal(null)} />
-              <div className="absolute right-0 top-8 z-40 w-56 rounded-lg bg-[#15151f] border border-white/10 shadow-2xl p-1.5">
+              <div className="absolute right-0 top-8 z-40 w-56 rounded-lg bg-chrome border border-white/10 shadow-2xl p-1.5">
                 {menuView === 'root' && (
                   <div className="space-y-0.5">
                     <AddItem icon={Camera}  label="Camera"        onClick={openCameraPicker} />
@@ -540,7 +562,12 @@ function SourcesPanel() {
       {list.length === 0 ? (
         <div className="p-8 text-center text-white/30">
           <Plus size={22} className="mx-auto mb-2 opacity-40" />
-          <p className="text-[12px]">No {cat.label.toLowerCase()} yet — click <span className="text-purple-300 font-medium">Add Source</span></p>
+          <p className="text-[12px]">
+            No {cat.label.toLowerCase()} yet — click{' '}
+            <button onClick={() => setMenuOpen(true)} className="text-purple-300 font-medium hover:text-purple-200 underline underline-offset-2">
+              Add Source
+            </button>
+          </p>
         </div>
       ) : (
         <div className="p-2.5 grid grid-cols-7 gap-2">
@@ -565,7 +592,24 @@ function SourcesPanel() {
                   onClick={e => { e.stopPropagation(); removeSource(s.id) }}
                   className="absolute top-1 left-1 w-4 h-4 rounded bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
                 ><Trash2 size={9} className="text-white/70" /></button>
-                <div className="px-1.5 py-1 bg-[#0a0a12] flex items-center gap-1">
+                {/* Fit control — images only, since every other source type is
+                    already a 16:9 video frame with nothing to letterbox. */}
+                {s.type === 'image' && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation()
+                      const order: SourceFit[] = ['contain', 'cover', 'fill']
+                      const next = order[(order.indexOf(s.fit ?? 'contain') + 1) % order.length]
+                      setSourceFit(s.id, next)
+                    }}
+                    title={`Fit: ${s.fit ?? 'contain'} — click to change`}
+                    className="absolute top-1 left-6 h-4 px-1 rounded bg-black/60 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity"
+                  >
+                    <Maximize2 size={8} className="text-white/70" />
+                    <span className="text-[7px] font-bold uppercase text-white/70">{s.fit ?? 'contain'}</span>
+                  </button>
+                )}
+                <div className="px-1.5 py-1 bg-chrome flex items-center gap-1">
                   <Icon size={9} className="text-white/40 shrink-0" />
                   <span className="text-[9.5px] font-medium text-white/75 truncate">{s.label}</span>
                 </div>
@@ -917,11 +961,17 @@ function AudioMixer() {
         {chans.map((ch, i) => (
           <div key={ch.name} className={cn('flex flex-col items-center gap-1 px-1.5 py-1 rounded-lg shrink-0 w-[58px]',
             ch.master ? 'bg-purple-600/10 border border-purple-500/25' : 'bg-white/[0.02]')}>
-            <div className="text-center leading-tight">
-              <div className="text-[10px] font-semibold text-white/80 truncate w-full">{ch.name}</div>
-              <div className="text-[8px] text-white/55 truncate w-full">{ch.sub}</div>
+            {/* min-w-0 + w-full are load-bearing: this sits in a
+                `flex-col items-center` parent, where a flex item sizes to its
+                content instead of stretching. Without a width bound the
+                `truncate` below had nothing to truncate against, so long device
+                names ("Microphone Array (Realtek…)") overflowed the 58px strip
+                and overlapped the neighbouring channel. */}
+            <div className="text-center leading-tight w-full min-w-0">
+              <div title={ch.name} className="text-[10px] font-semibold text-white/80 truncate">{ch.name}</div>
+              <div className="text-[8px] text-white/55 truncate">{ch.sub}</div>
             </div>
-            <div className="relative w-7 h-7 rounded-full bg-[#15151f] border border-white/10">
+            <div className="relative w-7 h-7 rounded-full bg-chrome border border-white/10">
               <div className="absolute left-1/2 top-1 w-0.5 h-2.5 bg-purple-400 origin-bottom rounded-full" style={{ transform: `translateX(-50%) rotate(${(ch.level / 100) * 270 - 135}deg)` }} />
             </div>
             <div className="flex items-end gap-1 h-[78px] mt-1">

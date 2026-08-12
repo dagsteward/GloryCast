@@ -458,7 +458,12 @@ export class Compositor {
 
     this.copyProgram.use()
     this.copyProgram.setVec4('u_rect', FULL_FRAME.x, FULL_FRAME.y, FULL_FRAME.width, FULL_FRAME.height)
-    this.copyProgram.setVec4('u_texRect', 0, 0, 1, 1)
+    // fromTarget is an FBO-rendered texture, which OpenGL stores bottom-up —
+    // the opposite of the top-down convention used for directly-uploaded
+    // camera/image sources (see SourceTexture.update's disabled FLIP_Y).
+    // Sampling it with the same unflipped rect as a normal source renders the
+    // program output upside down, which is exactly what this V-flip corrects.
+    this.copyProgram.setVec4('u_texRect', 0, 1, 1, -1)
     this.copyProgram.setBool('u_flipH', false)
     this.copyProgram.setTexture('u_tex', target.texture, 0)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
@@ -473,7 +478,9 @@ export class Compositor {
     const p = this.blendProgram
     p.use()
     p.setVec4('u_rect', FULL_FRAME.x, FULL_FRAME.y, FULL_FRAME.width, FULL_FRAME.height)
-    p.setVec4('u_texRect', 0, 0, 1, 1)
+    // Same FBO bottom-up vs. source top-down mismatch as present() — both
+    // u_from and u_to are FBO-rendered scene textures, so both need the flip.
+    p.setVec4('u_texRect', 0, 1, 1, -1)
     p.setBool('u_flipH', false)
     p.setFloat('u_progress', progress)
     p.setInt('u_mode', MODE_INDEX[spec.kind])

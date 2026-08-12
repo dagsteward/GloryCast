@@ -42,10 +42,16 @@ function sampleCpu(): { total: number; gpu: number | null } {
   // Electron reports per-process usage where 100% means one saturated core.
   // Normalise against core count so 100% means "the whole machine", matching
   // what Task Manager shows the operator.
+  //
+  // Kept to one decimal rather than rounded to an integer: on a many-core
+  // machine a genuinely-busy app still divides down to a fraction of a percent,
+  // and integer rounding reported every such reading as a flat "0%" that looked
+  // like broken telemetry rather than a light load.
   const cores = cpus().length || 1
+  const round1 = (n: number) => Math.round(n * 10) / 10
   return {
-    total: Math.min(100, Math.round(total / cores)),
-    gpu: gpu === null ? null : Math.min(100, Math.round(gpu / cores)),
+    total: Math.min(100, round1(total / cores)),
+    gpu: gpu === null ? null : Math.min(100, round1(gpu / cores)),
   }
 }
 

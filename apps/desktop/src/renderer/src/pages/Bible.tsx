@@ -13,9 +13,10 @@ import type { LowerThirdStyle } from '../components/bible/LowerThird'
 import { useServiceStore, type LiveItem } from '../stores/serviceStore'
 import { BackgroundPicker } from '../components/bible/BackgroundPicker'
 import { SlideBackdrop } from '../components/bible/SlideBackdrop'
+import { loadCrossReferences, crossReferencesFor, crossReferenceLicense } from '../lib/studyData'
 import { useBackgroundStore } from '../stores/backgroundStore'
 import {
-  loadTranslation, isLoaded, isBundled, getChapter, searchBibleMerged,
+  loadTranslation, isLoaded, isBundled, getChapter, getVerseText, searchBibleMerged,
   highlightTerms, highlightRegex, BUNDLED_TRANSLATIONS,
   type SearchMode, type SearchHit,
 } from '../lib/bibleData'
@@ -65,91 +66,62 @@ const BOOKS: Book[] = [
 
 // ─── Translations (global) ───────────────────────────────────────────────────
 
-const TRANSLATIONS: Translation[] = [
-  // English — WEB & KJV ship with the app (public domain); the rest load from
-  // the user's own licensed files via the backend.
-  { id: 'WEB',  name: 'World English Bible',         lang: 'English'    },
-  { id: 'KJV',  name: 'King James Version',          lang: 'English'    },
-  { id: 'NIV',  name: 'New International Version',   lang: 'English'    },
-  { id: 'ESV',  name: 'English Standard Version',    lang: 'English'    },
-  { id: 'NKJV', name: 'New King James Version',      lang: 'English'    },
-  { id: 'NLT',  name: 'New Living Translation',      lang: 'English'    },
-  { id: 'MSG',  name: 'The Message',                 lang: 'English'    },
-  { id: 'AMP',  name: 'Amplified Bible',             lang: 'English'    },
-  { id: 'GNT',  name: 'Good News Translation',       lang: 'English'    },
-  // Ghanaian / West African
-  { id: 'AST',  name: 'Asante Twi Bible',            lang: 'Asante Twi' },
-  { id: 'AKN',  name: 'Akan Bible',                  lang: 'Akan'       },
-  { id: 'TWI',  name: 'Twi Bible',                   lang: 'Twi'        },
-  { id: 'HAU',  name: 'Hausa Bible',                 lang: 'Hausa'      },
-  { id: 'YOR',  name: 'Yoruba Bible',                lang: 'Yoruba'     },
-  { id: 'IGB',  name: 'Igbo Bible',                  lang: 'Igbo'       },
-  // East / South Africa
-  { id: 'SWA',  name: 'Kiswahili Bible',             lang: 'Swahili'    },
-  { id: 'ZUL',  name: 'Zulu Bible',                  lang: 'Zulu'       },
-  // European
-  { id: 'LSG',  name: 'Louis Segond (Français)',     lang: 'French'     },
-  { id: 'RVR',  name: 'Reina-Valera (Español)',      lang: 'Spanish'    },
-  { id: 'ARC',  name: 'Almeida Corrigida (PT)',      lang: 'Portuguese' },
-  // Middle East
-  { id: 'ARA',  name: 'Arabic Bible (عربي)',         lang: 'Arabic'     },
+/**
+ * Translations that ship inside the app. Everything beyond this is discovered
+ * at runtime from the operator's own library (imported .bib files and
+ * API.Bible downloads).
+ *
+ * This list used to name 22 translations — Twi, Yoruba, Hausa, French,
+ * Arabic and more — none of which the app actually had. Selecting one showed
+ * five hardcoded sample verses and blanks everywhere else, which on a live
+ * programme output is worse than not offering it at all: the operator sees
+ * John 3:16 render perfectly, then projects an empty screen on 3:17.
+ */
+const BUILT_IN_TRANSLATIONS: Translation[] = [
+  { id: 'WEB', name: 'World English Bible', lang: 'English' },
+  { id: 'KJV', name: 'King James Version',  lang: 'English' },
 ]
 
-const TRANSLATION_GROUPS = [
-  { label: 'English',        ids: ['WEB','KJV','NIV','ESV','NKJV','NLT','MSG','AMP','GNT'] },
-  { label: 'Ghanaian / West Africa', ids: ['AST','AKN','TWI','HAU','YOR','IGB'] },
-  { label: 'East & South Africa',    ids: ['SWA','ZUL'] },
-  { label: 'European',       ids: ['LSG','RVR','ARC'] },
-  { label: 'Arabic',         ids: ['ARA'] },
-]
+/** Live list — built-ins plus whatever the user has actually installed. */
+function useAvailableTranslations(): Translation[] {
+  const [installed, setInstalled] = useState<Translation[]>([])
 
-const translationById = (id: string) => TRANSLATIONS.find(t => t.id === id)
+  useEffect(() => {
+    let cancelled = false
+    void window.glorycast?.bible?.list()
+      .then(list => {
+        if (cancelled) return
+        setInstalled(
+          list
+            .filter(t => !BUILT_IN_TRANSLATIONS.some(b => b.id === t.id))
+            .map(t => ({ id: t.id, name: t.name, lang: 'Installed' })),
+        )
+      })
+      .catch(() => { /* browser preview — built-ins only */ })
+    return () => { cancelled = true }
+  }, [])
+
+  return useMemo(() => [...BUILT_IN_TRANSLATIONS, ...installed], [installed])
+}
 
 // ─── Secondary-translation snippets (non-bundled languages) ────────────────────
 // Illustrative dual-screen text for the non-bundled translations (Twi, French, …)
 // until the user installs the licensed file for that language. The primary text
 // (WEB / KJV) now comes from the full bundled Bible via lib/bibleData.
-const SECONDARY_TEXTS: Record<string, Record<string, string>> = {
-  AST: {
-    'John:3:16':        'Efiri sɛ Onyankopɔn dɔɔ wiase saa kɛse a, ɔde nʼabarimaa baako pɛ maa nnipa.',
-    'Romans:8:28':      'Na yɛnim sɛ biribiara yɛ papa ma wɔn a wɔdɔ Onyankopɔn.',
-    'Psalms:23:1':      'Awurade yɛ me hwɛfo; enti mhia biribi.',
-    'Philippians:4:13': 'Metumi ade nyinaa yɛ Kristo a ɔhyɛ me den no mu.',
-    'Philippians:4:6':  'Mma anibere nni mo mu hwee ho, na mmom biribiara mu, de mpae ne n\'aseda kɔ Onyankopɔn hɔ.',
-  },
-  LSG: {
-    'John:3:16':        'Car Dieu a tant aimé le monde qu\'il a donné son Fils unique, afin que quiconque croit en lui ne périsse point.',
-    'Romans:8:28':      'Nous savons, du reste, que toutes choses concourent au bien de ceux qui aiment Dieu.',
-    'Psalms:23:1':      'L\'Éternel est mon berger: je ne manquerai de rien.',
-    'Philippians:4:13': 'Je puis tout par celui qui me fortifie.',
-    'Philippians:4:6':  'Ne vous inquiétez de rien; mais en toute chose faites connaître vos besoins à Dieu.',
-  },
-  RVR: {
-    'John:3:16':        'Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito, para que todo aquel que en él cree, no se pierda.',
-    'Romans:8:28':      'Y sabemos que a los que aman a Dios, todas las cosas les ayudan a bien.',
-    'Psalms:23:1':      'Jehová es mi pastor; nada me faltará.',
-    'Philippians:4:13': 'Todo lo puedo en Cristo que me fortalece.',
-    'Philippians:4:6':  'Por nada estéis afanosos, sino sean conocidas vuestras peticiones delante de Dios.',
-  },
-  ARC: {
-    'John:3:16':        'Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, para que todo aquele que nele crê não pereça.',
-    'Romans:8:28':      'E sabemos que todas as coisas contribuem juntamente para o bem daqueles que amam a Deus.',
-    'Psalms:23:1':      'O Senhor é o meu pastor, nada me faltará.',
-    'Philippians:4:13': 'Posso tudo naquele que me fortalece.',
-    'Philippians:4:6':  'Não andeis ansiosos por coisa alguma; em tudo, porém, sejam conhecidas as vossas petições a Deus.',
-  },
-  SWA: {
-    'John:3:16':        'Kwa maana Mungu aliupenda ulimwengu kiasi kwamba alimtoa Mwanawe wa pekee, ili kila mmoja amwaminiye asipoteze.',
-    'Romans:8:28':      'Nasi tunajua ya kwamba mambo yote yanafanya kazi pamoja kwa mema kwa wapendao Mungu.',
-    'Psalms:23:1':      'Bwana ndiye mchungaji wangu, sitakuwa na uhitaji.',
-  },
-}
 
-function getSecondaryText(translationId: string, bookName: string, chapter: number, verse: number): string | undefined {
-  const map = SECONDARY_TEXTS[translationId]
-  if (!map) return undefined
-  const key = `${bookName}:${chapter}:${verse}`
-  return map[key]
+/**
+ * Secondary-column text.
+ *
+ * This used to read from SECONDARY_TEXTS — five hand-written verses per
+ * language. Any other reference rendered blank, so dual mode looked functional
+ * on John 3:16 and silently produced nothing on the next verse. It now reads
+ * the real installed translation and returns undefined when there genuinely is
+ * no text, which the caller renders as an honest placeholder.
+ */
+function getSecondaryText(
+  translationId: string, bookName: string, chapter: number, verse: number,
+): string | undefined {
+  return getVerseText(translationId, bookName, chapter, verse)
 }
 
 // ─── Verse helpers ────────────────────────────────────────────────────────────
@@ -247,6 +219,8 @@ const LT_STYLES: { id: LowerThirdStyle; label: string }[] = [
 // ─── BiblePage ────────────────────────────────────────────────────────────────
 
 export function BiblePage() {
+  // Only what is genuinely installed — see BUILT_IN_TRANSLATIONS.
+  const translations = useAvailableTranslations()
   const [testament,          setTestament]          = useState<'OT'|'NT'>('NT')
   const [bookFilter,         setBookFilter]         = useState('')
   const [selectedBook,       setSelectedBook]       = useState<Book>(BOOKS[42])   // John
@@ -317,10 +291,26 @@ export function BiblePage() {
     b.testament === testament &&
     (bookFilter ? b.name.toLowerCase().includes(bookFilter.toLowerCase()) : true)
   )
-  const crossRefs = selectedVerse
-    ? (CROSS_REFS[`${selectedBook.name}:${selectedChapter}:${selectedVerse}`] ??
-       CROSS_REFS[`${selectedBook.name}:${selectedChapter}:1`] ?? [])
-    : []
+  // Cross-references now come from the real 344,800-reference dataset rather
+  // than the 54-verse sample that shipped before — that sample rendered
+  // convincingly on John 3:16 and returned nothing for almost every other
+  // verse in the Bible.
+  const [studyReady, setStudyReady] = useState(false)
+  useEffect(() => { void loadCrossReferences().then(() => setStudyReady(true)) }, [])
+
+  const crossRefs = useMemo(() => {
+    if (!selectedVerse || !studyReady) return []
+    return crossReferencesFor(selectedBook.name, selectedChapter, selectedVerse)
+      .map(r => ({
+        ref: r.ref,
+        // Prefer the translation on screen; fall back to bundled WEB so a
+        // reference still reads even when the primary text lacks that verse.
+        text: getVerseText(primaryTx, r.book, r.chapter, r.verse)
+          ?? getVerseText('WEB', r.book, r.chapter, r.verse)
+          ?? '',
+      }))
+      .filter(x => x.text)
+  }, [selectedBook, selectedChapter, selectedVerse, primaryTx, studyReady])
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
@@ -381,6 +371,31 @@ export function BiblePage() {
       background: item.background,
       source:     'bible',
     }
+  }
+
+  /**
+   * Push a verse straight to the scripture projection window.
+   *
+   * Deliberately separate from the producer queue: this is the standalone path
+   * for a service with no video production, so it does not touch preview /
+   * program. Opening the window is idempotent, so hitting Project before the
+   * display exists just opens it and shows the verse.
+   */
+  function projectVerse(v: VerseData, mode: 'full' | 'lower-third') {
+    window.glorycast?.window.openBibleDisplay()
+    window.glorycast?.bibleDisplay.send({
+      text: v.text,
+      reference: `${selectedBook.name} ${selectedChapter}:${v.verse}`,
+      translation: primaryTx,
+      mode,
+    })
+  }
+
+  /** Blank the projection screen — null text, not a stale verse left up. */
+  function clearProjection() {
+    window.glorycast?.bibleDisplay.send({
+      text: null, reference: null, translation: null, mode: 'full',
+    })
   }
 
   function sendToDisplay(v: VerseData) {
@@ -600,13 +615,8 @@ export function BiblePage() {
             <div className="flex items-center gap-1.5">
               <select value={primaryTx} onChange={e => setPrimaryTx(e.target.value)}
                 className="bg-white/[0.04] border border-white/10 text-[11px] text-white/70 px-2 py-1 rounded-lg outline-none cursor-pointer">
-                {TRANSLATION_GROUPS.map(g => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.ids.map(id => {
-                      const t = translationById(id)
-                      return t ? <option key={id} value={id}>{id} — {t.lang}</option> : null
-                    })}
-                  </optgroup>
+                {translations.map(t => (
+                  <option key={t.id} value={t.id}>{t.id} — {t.name}</option>
                 ))}
               </select>
             </div>
@@ -628,13 +638,8 @@ export function BiblePage() {
                   className="overflow-hidden">
                   <select value={secondaryTx} onChange={e => setSecondaryTx(e.target.value)}
                     className="bg-violet-900/20 border border-violet-500/25 text-[11px] text-violet-300 px-2 py-1 rounded-lg outline-none cursor-pointer">
-                    {TRANSLATION_GROUPS.map(g => (
-                      <optgroup key={g.label} label={g.label}>
-                        {g.ids.filter(id => id !== primaryTx).map(id => {
-                          const t = translationById(id)
-                          return t ? <option key={id} value={id}>{id} — {t.lang}</option> : null
-                        })}
-                      </optgroup>
+                    {translations.filter(t => t.id !== primaryTx).map(t => (
+                      <option key={t.id} value={t.id}>{t.id} — {t.name}</option>
                     ))}
                   </select>
                 </motion.div>
@@ -661,7 +666,7 @@ export function BiblePage() {
                 <div className="py-12 text-center space-y-2">
                   {!primaryBundled ? (
                     <>
-                      <p className="text-sm text-white/40">{translationById(primaryTx)?.name ?? primaryTx} isn't installed</p>
+                      <p className="text-sm text-white/40">{translations.find(t => t.id === primaryTx)?.name ?? primaryTx} isn't installed</p>
                       <p className="text-[11px] text-white/30 max-w-sm mx-auto leading-relaxed">
                         {primaryTx} is a licensed translation. Install its file in Settings, or switch to the bundled <button onClick={() => setPrimaryTx('WEB')} className="text-purple-400 hover:text-purple-300 underline">WEB</button> / <button onClick={() => setPrimaryTx('KJV')} className="text-purple-400 hover:text-purple-300 underline">KJV</button>.
                       </p>
@@ -808,6 +813,28 @@ export function BiblePage() {
                     <Send size={9} /> Queue
                   </button>
                 </div>
+
+                {/* Direct projection — standalone, independent of Production.
+                    A church with no video mix still gets scripture on screen;
+                    mode is chosen per verse rather than as a global setting. */}
+                <div className="flex items-center gap-1.5 pt-2 mt-1 border-t border-white/[0.06]">
+                  <span className="text-[9px] uppercase tracking-wider text-white/35 mr-auto">Project</span>
+                  <button
+                    onClick={() => projectVerse(selectedVerseData, 'full')}
+                    title="Show full screen on the scripture display"
+                    className="px-2 py-1 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-[10px] text-white/80 font-medium transition-colors"
+                  >Full</button>
+                  <button
+                    onClick={() => projectVerse(selectedVerseData, 'lower-third')}
+                    title="Show as a lower third on the scripture display"
+                    className="px-2 py-1 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-[10px] text-white/80 font-medium transition-colors"
+                  >Lower 3rd</button>
+                  <button
+                    onClick={clearProjection}
+                    title="Clear the scripture display"
+                    className="px-2 py-1 rounded-md bg-white/[0.04] hover:bg-red-600/30 text-[10px] text-white/55 hover:text-red-200 transition-colors"
+                  >Clear</button>
+                </div>
               </div>
 
               {/* Lower third style + preview toggle */}
@@ -857,7 +884,13 @@ export function BiblePage() {
                   Cross-References {crossRefs.length > 0 && `(${crossRefs.length})`}
                 </div>
                 {crossRefs.length === 0 ? (
-                  <p className="text-[11px] text-white/25 text-center py-6">Select a verse to see cross-references</p>
+                  <p className="text-[11px] text-white/25 text-center py-6">
+                    {!studyReady
+                      ? 'Loading cross-references…'
+                      : selectedVerse
+                        ? 'No cross-references for this verse'
+                        : 'Select a verse to see cross-references'}
+                  </p>
                 ) : crossRefs.map(xr => (
                   <div key={xr.ref} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] cursor-pointer hover:bg-white/[0.04] hover:border-white/10 transition-all group">
                     <div className="flex items-center justify-between mb-1">
@@ -867,6 +900,14 @@ export function BiblePage() {
                     <p className="text-[10px] text-white/45 leading-relaxed line-clamp-2">{xr.text}</p>
                   </div>
                 ))}
+
+                {/* CC-BY makes attribution a condition of use, so it travels
+                    with the data rather than living only in Settings. */}
+                {crossRefs.length > 0 && crossReferenceLicense() && (
+                  <p className="text-[9px] text-white/25 pt-2 border-t border-white/[0.05] leading-relaxed">
+                    {crossReferenceLicense()}
+                  </p>
+                )}
               </div>
             )}
 

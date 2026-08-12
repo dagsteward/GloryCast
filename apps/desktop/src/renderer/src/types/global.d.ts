@@ -18,6 +18,16 @@ export interface GloryCastSystemStats {
   memoryPercent: number
 }
 
+/** What the confidence-monitor (stage display) window actually needs to render. */
+export interface StagePayload {
+  /** The verse/quote body on stage right now, or null when nothing is live. */
+  body: string | null
+  reference: string | null
+  translation: string | null
+  nextUp: string | null
+  notes: string | null
+}
+
 export interface GloryCastAPI {
   store: {
     get: (key: string) => Promise<unknown>
@@ -67,6 +77,49 @@ export interface GloryCastAPI {
     stop: () => Promise<{ ok: true }>
     chunk: (data: ArrayBuffer) => void
   }
+  /**
+   * Translations read from .bib files on disk. Absent in the browser dev
+   * preview, where there is no filesystem — callers fall back to the bundled
+   * WEB/KJV JSON, so scripture projection still works there.
+   */
+  bible?: {
+    list: () => Promise<Array<{
+      id: string; name: string; copyright: string; loaded: boolean; removable: boolean
+    }>>
+    libraryDir: () => Promise<string>
+    import: () => Promise<{ ok: boolean; added: string[]; failed?: string[] }>
+    remove: (id: string) => Promise<{ ok: boolean }>
+  }
+  /** Online translations via API.Bible, using the operator's own key. */
+  bibleApi?: {
+    keyStatus: () => Promise<{ configured: boolean }>
+    setKey: (key: string) => Promise<{ ok: boolean }>
+    list: () => Promise<Array<{
+      id: string; abbreviation: string; name: string; language: string; isPublicDomain: boolean
+    }>>
+    verse: (payload: { bibleId: string; book: string; chapter: number; verse?: number; endVerse?: number })
+      => Promise<{ text: string }>
+    download: (payload: { bibleId: string; abbreviation: string; name: string })
+      => Promise<{ ok: boolean; error?: string; verses?: number }>
+    verse: (payload: { translation: string; book: string; chapter: number; verse?: number; endVerse?: number })
+      => Promise<{ text: string; translation: string }>
+    chapter: (payload: { translation: string; book: string; chapter: number })
+      => Promise<Array<{ verse: number; text: string }>>
+    search: (payload: {
+      translation: string
+      query: string
+      limit?: number
+      offset?: number
+      mode?: 'all' | 'any' | 'phrase'
+      caseSensitive?: boolean
+      wholeWord?: boolean
+      testament?: 'OT' | 'NT' | 'both'
+      books?: string[]
+    }) => Promise<{
+      results: Array<{ book: string; chapter: number; verse: number; text: string; score: number }>
+      total: number
+    }>
+  }
   shell: {
     openPath: (path: string) => Promise<string>
     openExternal: (url: string) => Promise<void>
@@ -78,6 +131,17 @@ export interface GloryCastAPI {
     setFullscreen: (fullscreen: boolean) => void
     openStageDisplay: () => void
     closeStageDisplay: () => void
+    openBibleDisplay: () => void
+    closeBibleDisplay: () => void
+  }
+  bibleDisplay: {
+    send: (payload: {
+      text: string | null; reference: string | null
+      translation: string | null; mode: 'full' | 'lower-third'
+    }) => void
+  }
+  stage: {
+    send: (payload: StagePayload) => void
   }
   on: (channel: string, callback: (...args: unknown[]) => void) => void
   off: (channel: string, callback: (...args: unknown[]) => void) => void

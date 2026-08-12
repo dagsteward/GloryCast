@@ -39,12 +39,37 @@ const BOOK_NAMES = [
   '1 Sam', '2 Sam', '1 Pet', '2 Pet',
 ]
 
-const BOOK_PATTERN = BOOK_NAMES
+/**
+ * Spoken forms of the numbered books — "Second Corinthians", not "2
+ * Corinthians". Whisper transcribes what it hears, and a preacher says the
+ * ordinal aloud, so without these every epistle with a number in front of it
+ * was detected and then silently discarded.
+ */
+const ORDINAL_WORD = ['', 'First', 'Second', 'Third']
+
+const SPOKEN_ORDINAL_BOOKS = BOOK_NAMES
+  .filter(n => /^[123] /.test(n))
+  .map(n => `${ORDINAL_WORD[Number(n[0])]} ${n.slice(2)}`)
+
+// Ordinal forms first: regex alternation takes the earliest match that works,
+// so "Second Corinthians" has to be offered before anything that could match a
+// shorter prefix of it.
+const BOOK_PATTERN = [...SPOKEN_ORDINAL_BOOKS, ...BOOK_NAMES]
   .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   .join('|')
 
+// Chapter/verse separator accepts a colon OR plain whitespace. Text typed or
+// read from a screen has the colon ("John 3:16"); speech transcribed from
+// audio usually doesn't — Whisper renders a spoken "John three sixteen" as
+// "John 3 16", not "John 3:16". Requiring a literal colon meant almost no
+// spoken verse citation ever captured a verse number at all, silently
+// falling through as a chapter-only mention (see the skip below).
 const SCRIPTURE_REGEX = new RegExp(
-  `\\b(${BOOK_PATTERN})\\.?\\s+(\\d{1,3})(?::\\s*(\\d{1,3})(?:\\s*[-–]\\s*(\\d{1,3}))?)?`,
+  `\\b(${BOOK_PATTERN})\\.?\\s+(?:chapter\\s+)?(\\d{1,3})` +
+  // The separator also allows "." because Whisper writes a spoken "four
+  // thirteen" as "4.13" — without it, Philippians 4:13 parsed as a bare
+  // chapter and was dropped.
+  `(?:\\s*[:.,]?\\s*(?:verses?\\s+)?(\\d{1,3})(?:\\s*(?:[-–]|through|to)\\s*(\\d{1,3}))?)?`,
   'gi',
 )
 
@@ -63,8 +88,27 @@ const ABBREV_MAP: Record<string, string> = {
   'rev': 'Revelation', 'prov': 'Proverbs', 'eccl': 'Ecclesiastes',
 }
 
+/** Canonical casing for every full book name, keyed lowercase for lookup. */
+const CANONICAL_BOOK: Record<string, string> = Object.fromEntries(
+  BOOK_NAMES.map(n => [n.toLowerCase(), n]),
+)
+
 function normalizeBook(raw: string): string {
-  return ABBREV_MAP[raw.toLowerCase().trim()] ?? raw.trim()
+  // "Second Corinthians" → "2 Corinthians" before anything else looks at it,
+  // so spoken and written forms converge on the one canonical key the Bible
+  // data is indexed by.
+  const spoken = raw.trim().replace(
+    /^(first|second|third)\s+/i,
+    (_m, word: string) => `${['first', 'second', 'third'].indexOf(word.toLowerCase()) + 1} `,
+  )
+  const lower = spoken.toLowerCase().trim()
+  // Whisper transcribes natural speech, not scripture citations — it doesn't
+  // reliably capitalize a book name mid-sentence ("...in john 3:16..." often
+  // comes out lowercase). The bundled Bible JSON keys are exact and
+  // case-sensitive ("John"), so passing through Whisper's casing looked up
+  // nothing and silently fell through to "verse text unavailable" for every
+  // detection whose book name wasn't already correctly capitalized.
+  return ABBREV_MAP[lower] ?? CANONICAL_BOOK[lower] ?? spoken
 }
 
 export interface ScriptureHit {
@@ -98,6 +142,62 @@ export function detectScripture(text: string, seen: Set<string>): ScriptureHit[]
     results.push({ reference, book, chapter, verse, endVerse, confidence })
   }
   return results
+}
+
+// ── Spoken translation switching ─────────────────────────────────────────────
+// A preacher who wants a specific wording says so out loud: "John 3:16, New
+// King James". Until they do, projection stays on the configured default
+// (NIV). Whisper writes speech, not citations, so these match spoken forms
+// ("new king james") as well as spelled-out initialisms ("N K J V").
+
+/**
+ * Spoken aliases → translation id. Order matters within the matcher below:
+ * longer, more specific phrases must win, or "new king james" would match the
+ * "king james" alias and silently project the wrong translation.
+ */
+const TRANSLATION_ALIASES: Array<[string, string]> = [
+  ['new international version', 'NIV'], ['n i v', 'NIV'], ['niv', 'NIV'],
+  ['new king james version', 'NKJV'], ['new king james', 'NKJV'],
+  ['n k j v', 'NKJV'], ['nkjv', 'NKJV'],
+  ['king james version', 'KJV'], ['king james', 'KJV'], ['k j v', 'KJV'], ['kjv', 'KJV'],
+  ['english standard version', 'ESV'], ['e s v', 'ESV'], ['esv', 'ESV'],
+  ['new living translation', 'NLT'], ['n l t', 'NLT'], ['nlt', 'NLT'],
+  ['good news translation', 'GNT'], ['good news bible', 'GNT'], ['good news', 'GNT'],
+  ['the passion translation', 'TPT'], ['passion translation', 'TPT'], ['tpt', 'TPT'],
+  ['the living bible', 'TLB'], ['living bible', 'TLB'],
+  ['the message', 'MSG'], ['message translation', 'MSG'],
+  ['world english bible', 'WEB'],
+]
+
+/**
+ * The translation named most recently in `text`, or null if none is mentioned.
+ * Scans for the LAST mention so that, as the rolling transcript window slides,
+ * the most recent instruction wins rather than one from minutes ago.
+ */
+export function detectTranslation(text: string): string | null {
+  const hay = ` ${text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ')} `
+
+  let bestEnd = -1
+  let bestId: string | null = null
+  let bestLength = 0
+
+  for (const [alias, id] of TRANSLATION_ALIASES) {
+    const index = hay.lastIndexOf(` ${alias} `)
+    if (index === -1) continue
+
+    // Ranked by where the match ENDS, not where it starts. Aliases nest —
+    // "king james" lives inside "new king james" and therefore starts later,
+    // so ranking by start position picks the shorter, wrong one every time.
+    // Both end at the same offset, so comparing ends turns nesting into a tie
+    // that the longer alias then wins.
+    const end = index + alias.length
+    if (end > bestEnd || (end === bestEnd && alias.length > bestLength)) {
+      bestEnd = end
+      bestId = id
+      bestLength = alias.length
+    }
+  }
+  return bestId
 }
 
 // ── Spoken quote / paraphrase → verse suggestion ─────────────────────────────
@@ -172,6 +272,59 @@ function bundledVerseText(tx: string, book: string, chapter: number, verse?: num
   return parts.join(' ')
 }
 
+/**
+ * Read a translation from the operator's local .bib library via the main
+ * process. This is what makes NIV (and ESV, NKJV, NLT, …) available at all —
+ * they are far too large to bundle as JSON and are not public domain, so they
+ * live as files on disk rather than inside the app bundle.
+ *
+ * Returns '' in the browser dev preview, where there is no main process; the
+ * caller then falls back to bundled WEB/KJV so projection never breaks.
+ */
+async function localVerseText(
+  translation: string, book: string, chapter: number, verse?: number, endVerse?: number,
+): Promise<string> {
+  try {
+    const res = await window.glorycast?.bible?.verse({ translation, book, chapter, verse, endVerse })
+    return res?.text ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Map a translation abbreviation to an API.Bible id.
+ *
+ * Populated at runtime from the catalogue the operator's own key can see, so
+ * it reflects their entitlements rather than a hard-coded guess. Empty until
+ * `primeApiBibleIds()` has run.
+ */
+const _apiBibleIds = new Map<string, string>()
+
+export function apiBibleIdFor(translation: string): string | undefined {
+  return _apiBibleIds.get(translation.toUpperCase())
+}
+
+/**
+ * Fetch the catalogue once and index it by abbreviation. Safe to call
+ * repeatedly; does nothing without a configured key.
+ */
+export async function primeApiBibleIds(): Promise<number> {
+  try {
+    const list = await window.glorycast?.bibleApi?.list()
+    if (!list) return 0
+    for (const b of list) {
+      const abbr = b.abbreviation?.toUpperCase()
+      // First match wins: ABS lists regional variants under the same
+      // abbreviation and the primary edition comes first.
+      if (abbr && !_apiBibleIds.has(abbr)) _apiBibleIds.set(abbr, b.id)
+    }
+    return _apiBibleIds.size
+  } catch {
+    return 0
+  }
+}
+
 /** Query the backend Bible API for a (possibly licensed) translation, or ''. */
 async function backendVerseText(book: string, chapter: number, verse: number | undefined, translation: string): Promise<string> {
   try {
@@ -208,7 +361,25 @@ export async function resolveVerse(
     const t = bundledVerseText(translation, book, chapter, verse, endVerse)
     if (t) return { text: t, translation: translation.toUpperCase() }
   } else {
-    // 2. Licensed translation — try the backend (user's own licensed DB).
+    // 2a. Local .bib library — the operator's own translations on disk. Tried
+    //     before the network because it is offline, instant, and the common
+    //     case: a church running a service should never wait on an API for a
+    //     verse it already has locally.
+    const local = await localVerseText(translation, book, chapter, verse, endVerse)
+    if (local) return { text: local, translation: translation.toUpperCase() }
+
+    // 2b. API.Bible — the operator's own key against ABS's catalogue. Covers
+    //     translations the church has not got a local file for, including a
+    //     large public-domain set. Network-bound, so it sits after local.
+    const apiId = apiBibleIdFor(translation)
+    if (apiId) {
+      try {
+        const res = await window.glorycast?.bibleApi?.verse({ bibleId: apiId, book, chapter, verse, endVerse })
+        if (res?.text) return { text: res.text, translation: translation.toUpperCase() }
+      } catch { /* fall through to the next source */ }
+    }
+
+    // 2c. Licensed translation — try the backend (user's own licensed DB).
     const t = await backendVerseText(book, chapter, verse, translation)
     if (t) return { text: t, translation }
   }

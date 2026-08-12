@@ -347,10 +347,24 @@ export class TextRenderer {
     const { ctx } = this
     const size = frameHeight * 0.026
 
+    // A short brand-accent rule above the reference line — the difference
+    // between "text pasted on a video" and a designed broadcast lower third.
+    // Sized and positioned relative to the footer baseline so it scales with
+    // the rest of the treatment instead of being a fixed pixel value.
+    const ruleWidth = size * 2.2
+    const ruleY = y - size * 1.35
+    let ruleX = x - ruleWidth / 2
+    if (style.align === 'left') ruleX = x
+    else if (style.align === 'right') ruleX = x - ruleWidth
+    ctx.save()
+    ctx.fillStyle = '#a855f7'
+    ctx.fillRect(ruleX, ruleY, ruleWidth, Math.max(2, size * 0.09))
+    ctx.restore()
+
     ctx.save()
     ctx.textBaseline = 'middle'
     ctx.textAlign = style.align
-    ctx.font = `500 ${size}px ${style.fontFamily}`
+    ctx.font = `600 ${size}px ${style.fontFamily}`
     ctx.letterSpacing = '0.08em'
 
     if (style.legibility === 'shadow') {
@@ -359,7 +373,9 @@ export class TextRenderer {
     }
 
     const reference = content.attribution ?? ''
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.82)'
+    // A light purple tint (vs. plain white) ties the reference line to the
+    // app's brand accent without hurting legibility over video.
+    ctx.fillStyle = 'rgba(216, 180, 254, 0.92)'
     ctx.fillText(reference.toUpperCase(), x, y)
 
     if (content.badge) {
@@ -379,9 +395,12 @@ export class TextRenderer {
 
       ctx.textAlign = 'left'
       const boxX = style.align === 'right' ? badgeX - badgeWidth - padX * 2 : badgeX
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)'
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.22)'
+      ctx.strokeStyle = 'rgba(216, 180, 254, 0.35)'
+      ctx.lineWidth = Math.max(1, size * 0.05)
       roundRect(ctx, boxX, y - size * 0.62, badgeWidth + padX * 2, size * 1.24, size * 0.3)
       ctx.fill()
+      ctx.stroke()
 
       ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
       ctx.fillText(badgeText, boxX + padX, y)

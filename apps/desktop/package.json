@@ -6,9 +6,10 @@
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:main": "node scripts/electron-cjs.mjs && tsc -p tsconfig.main.json --watch",
     "dev:renderer": "vite --config vite.config.ts",
+    "dev:electron": "wait-on tcp:5173 dist/main/index.js && cross-env NODE_ENV=development electron .",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "npm run build --workspace=@glorycast/licensing && tsc -p tsconfig.main.json && node scripts/electron-cjs.mjs",
     "build:renderer": "vite build",
@@ -32,6 +33,7 @@
     "ffmpeg-static": "^5.3.0",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.363.0",
+    "mdb-reader": "^2.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.3",
@@ -47,10 +49,12 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.5.0",
     "concurrently": "^8.2.0",
+    "cross-env": "^10.1.0",
     "electron": "^29.0.0",
     "electron-builder": "^24.13.0",
     "postcss": "^8.5.15",
-    "vite": "^5.4.21"
+    "vite": "^5.4.21",
+    "wait-on": "^9.1.0"
   },
   "build": {
     "appId": "ai.glorycast.app",

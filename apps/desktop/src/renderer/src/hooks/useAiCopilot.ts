@@ -7,6 +7,7 @@ import {
   detectScripture,
   detectScriptureQuotes,
   detectSongs,
+  detectTranslation,
   resolveVerse,
   buildSongIndex,
   type SongLine,
@@ -25,7 +26,12 @@ import {
 // listening to the default microphone.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const COPILOT_TRANSLATION = 'NIV'
+/**
+ * What scripture is projected in until the speaker asks for something else.
+ * NIV because that is what most congregations read from; the operator can
+ * override it, and saying a translation aloud mid-sermon switches it.
+ */
+const DEFAULT_TRANSLATION = 'NIV'
 
 export function useAiCopilot(): AsrStatus {
   const aiListening   = useServiceStore(s => s.aiListening)
@@ -34,6 +40,7 @@ export function useAiCopilot(): AsrStatus {
   const songLibrary   = useAppStore(s => s.songLibrary)
   const asrDeviceId   = useAppStore(s => s.asrDeviceId)
   const asrModel      = useAppStore(s => s.asrModel)
+  const bibleTranslation = useAppStore(s => s.bibleTranslation)
 
   const songIndexRef = useRef<SongLine[]>([])
   useEffect(() => {
@@ -49,16 +56,37 @@ export function useAiCopilot(): AsrStatus {
   const quoteBusyRef     = useRef(false)
   const lastQuoteScanRef = useRef(0)
 
+  /**
+   * Translation currently in force. Starts from the operator's configured
+   * default and is overridden for the rest of the service the moment a speaker
+   * names a different one aloud.
+   */
+  const translationRef = useRef(bibleTranslation || DEFAULT_TRANSLATION)
+  useEffect(() => { translationRef.current = bibleTranslation || DEFAULT_TRANSLATION }, [bibleTranslation])
+
   const handleTranscript = useCallback((text: string, _engine: AsrEngineId) => {
     windowRef.current = `${windowRef.current} ${text}`.trim().slice(-600)
     const windowText = windowRef.current
     setTranscript(windowText)
 
+    // "…John 3:16, New King James" — a translation named aloud sticks until a
+    // different one is named. Read from the newest utterance only, not the
+    // whole rolling window, so a translation mentioned a minute ago doesn't
+    // keep re-asserting itself over a later change.
+    const spoken = detectTranslation(text)
+    if (spoken) translationRef.current = spoken
+
     // ── Explicit references ("Romans 8:28") ──
     for (const hit of detectScripture(windowText, seenScriptureRef.current)) {
+      // A bare chapter mention with no verse ("in John chapter 10...") has no
+      // single verse to project. resolveVerse falls back to the WHOLE chapter
+      // in that case — hundreds of words the lower-third auto-fit then crams
+      // down to an unreadable, overflowing block. Only a specific verse is
+      // ever broadcast-ready, so skip anything without one.
+      if (hit.verse === undefined) continue
       void (async () => {
         const { text: verseText, translation } = await resolveVerse(
-          hit.book, hit.chapter, hit.verse, hit.endVerse, COPILOT_TRANSLATION,
+          hit.book, hit.chapter, hit.verse, hit.endVerse, translationRef.current,
         )
         addDetection({
           kind: 'scripture',
@@ -132,6 +160,8 @@ export function useAiCopilot(): AsrStatus {
     seenScriptureRef.current = new Set()
     seenQuoteRef.current = new Set()
     seenSongRef.current = new Set()
+    // A translation chosen by voice belongs to the service that ended.
+    translationRef.current = bibleTranslation || DEFAULT_TRANSLATION
   }, [aiListening])
 
   return status
