@@ -17,6 +17,7 @@ import { MinimalHomePage } from './pages/MinimalHome'
 import { CommandCenterPage } from './pages/CommandCenter'
 import { ErrorBoundary } from './components/shell/ErrorBoundary'
 import { StageControlPage } from './pages/StageControl'
+import { AudioMixerPage } from './pages/AudioMixerPage'
 
 export function App() {
   return (
@@ -79,12 +80,7 @@ export function App() {
                 description="Lower thirds, tickers, countdowns and overlay templates that composite onto the program output."
               />
             } />
-            <Route path="/audio" element={
-              <ModulePlaceholder
-                title="Audio Mixer"
-                description="Per-source gain, mute and solo with a master bus feeding the encoder. Currently available inline on the Production page."
-              />
-            } />
+            <Route path="/audio" element={<AudioMixerPage />} />
             <Route path="/playback" element={
               <ModulePlaceholder
                 title="Playback"

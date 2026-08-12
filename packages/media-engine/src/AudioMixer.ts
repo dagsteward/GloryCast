@@ -21,6 +21,17 @@ export interface ChannelState {
   soloed: boolean
   /** True when the channel's source actually carries audio. */
   hasSignal: boolean
+  /** Stereo position, -1 (hard left) .. 1 (hard right). */
+  pan: number
+  /**
+   * Three-band EQ in dB, -12..12.
+   *
+   * Chosen over a parametric EQ deliberately: a volunteer at a church desk
+   * needs "less boom, more clarity", not frequency and Q controls. The bands
+   * are fixed at the points that matter for spoken word — low shelf tames
+   * handling noise and room rumble, mid is presence, high shelf is air.
+   */
+  eq: { low: number; mid: number; high: number }
 }
 
 /** Instantaneous level readings for one channel, in dBFS. */
@@ -45,6 +56,10 @@ class Channel {
   readonly source: MediaStreamAudioSourceNode
   readonly gainNode: GainNode
   readonly analyser: AnalyserNode
+  readonly low: BiquadFilterNode
+  readonly mid: BiquadFilterNode
+  readonly high: BiquadFilterNode
+  readonly panner: StereoPannerNode
 
   // Explicit ArrayBuffer backing: getFloatTimeDomainData rejects a
   // SharedArrayBuffer-backed view, which is what the bare Float32Array type
@@ -68,8 +83,41 @@ class Channel {
 
     this.buffer = new Float32Array(this.analyser.fftSize)
 
-    this.source.connect(this.gainNode)
+    // EQ band frequencies chosen for spoken word on a church desk:
+    // 120Hz shelf for rumble and plosives, 2.5kHz for intelligibility,
+    // 8kHz shelf for air without pushing sibilance.
+    this.low = context.createBiquadFilter()
+    this.low.type = 'lowshelf'
+    this.low.frequency.value = 120
+
+    this.mid = context.createBiquadFilter()
+    this.mid.type = 'peaking'
+    this.mid.frequency.value = 2500
+    this.mid.Q.value = 0.9
+
+    this.high = context.createBiquadFilter()
+    this.high.type = 'highshelf'
+    this.high.frequency.value = 8000
+
+    this.panner = context.createStereoPanner()
+
+    // EQ sits BEFORE the fader so a gain change does not alter the tonal
+    // balance, and the meter reads post-fader — what actually reaches the bus.
+    this.source.connect(this.low)
+    this.low.connect(this.mid)
+    this.mid.connect(this.high)
+    this.high.connect(this.panner)
+    this.panner.connect(this.gainNode)
     this.gainNode.connect(this.analyser)
+  }
+
+  /** Ramped, like gain — a stepped filter change is audible on air. */
+  applyEq(context: AudioContext): void {
+    const t = context.currentTime
+    this.low.gain.setTargetAtTime(this.state.eq.low, t, 0.02)
+    this.mid.gain.setTargetAtTime(this.state.eq.mid, t, 0.02)
+    this.high.gain.setTargetAtTime(this.state.eq.high, t, 0.02)
+    this.panner.pan.setTargetAtTime(this.state.pan, t, 0.02)
   }
 
   /**
@@ -115,9 +163,11 @@ class Channel {
   }
 
   disconnect(): void {
-    try { this.source.disconnect() } catch { /* already torn down */ }
-    try { this.gainNode.disconnect() } catch { /* already torn down */ }
-    try { this.analyser.disconnect() } catch { /* already torn down */ }
+    // Every node in the chain, or removing a channel leaks the EQ and panner
+    // and the AudioContext keeps them alive for the life of the app.
+    for (const node of [this.source, this.low, this.mid, this.high, this.panner, this.gainNode, this.analyser]) {
+      try { node.disconnect() } catch { /* already torn down */ }
+    }
   }
 }
 
@@ -204,6 +254,7 @@ export class AudioMixer {
 
     const channel = new Channel(this.context, stream, {
       id, label, gain: 1, muted: false, soloed: false, hasSignal: true,
+      pan: 0, eq: { low: 0, mid: 0, high: 0 },
     })
     channel.gainNode.connect(this.master)
     this.channels.set(id, channel)
@@ -232,6 +283,31 @@ export class AudioMixer {
     if (!channel) return
     channel.state.gain = Math.max(0, Math.min(2, gain))
     this.refreshGains()
+  }
+
+  /** Stereo position, clamped to -1..1. */
+  setPan(id: string, pan: number): void {
+    const channel = this.channels.get(id)
+    if (!channel) return
+    channel.state.pan = Math.max(-1, Math.min(1, pan))
+    channel.applyEq(this.context)
+  }
+
+  /** Set one EQ band in dB, clamped to -12..12. */
+  setEq(id: string, band: 'low' | 'mid' | 'high', db: number): void {
+    const channel = this.channels.get(id)
+    if (!channel) return
+    channel.state.eq[band] = Math.max(-12, Math.min(12, db))
+    channel.applyEq(this.context)
+  }
+
+  /** Flatten EQ and centre pan — the "start again" a desk always needs. */
+  resetChannel(id: string): void {
+    const channel = this.channels.get(id)
+    if (!channel) return
+    channel.state.pan = 0
+    channel.state.eq = { low: 0, mid: 0, high: 0 }
+    channel.applyEq(this.context)
   }
 
   setMuted(id: string, muted: boolean): void {
