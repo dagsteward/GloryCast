@@ -17,7 +17,7 @@ export function TitleBar() {
     <div
       className={cn(
         'drag-region flex items-center justify-between h-10 px-4',
-        'bg-[#0d0d14] border-b border-white/[0.06]',
+        'bg-chrome border-b border-white/[0.06]',
         'shrink-0',
       )}
     >

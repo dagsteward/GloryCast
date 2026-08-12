@@ -72,7 +72,7 @@ export function AIAssistantPanel() {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 320, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="w-80 shrink-0 flex flex-col border-l border-white/[0.06] bg-[#0d0d18]"
+      className="w-80 shrink-0 flex flex-col border-l border-white/[0.06] bg-chrome"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">

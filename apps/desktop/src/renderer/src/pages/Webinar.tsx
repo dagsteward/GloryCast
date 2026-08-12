@@ -497,7 +497,9 @@ export function WebinarPage() {
           </div>
 
           {/* Controls bar */}
-          <div className="shrink-0 flex items-center justify-center gap-2 py-2.5 px-6 border-t border-white/[0.05] bg-black/30 backdrop-blur-sm">
+          {/* Call control bar — chrome below the video stage, not an overlay
+              on it, so it follows the theme. */}
+          <div className="shrink-0 flex items-center justify-center gap-2 py-2.5 px-6 border-t border-white/[0.05] bg-well backdrop-blur-sm">
             <ControlButton icon={audioOn ? Mic2 : MicOff}       label={audioOn ? 'Mute'       : 'Unmute'}   onClick={() => setAudioOn(v => !v)}    danger={!audioOn}    />
             <ControlButton icon={videoOn ? Video : VideoOff}    label={videoOn ? 'Stop Video' : 'Start Cam'} onClick={() => setVideoOn(v => !v)}    danger={!videoOn}    />
             <ControlButton icon={MonitorUp}                      label={sharing ? 'Stop Share' : 'Share'}     onClick={toggleShare}                  accent={sharing}     />
@@ -521,7 +523,7 @@ export function WebinarPage() {
         </div>
 
         {/* ── Right panel ─────────────────────────────────────────────────── */}
-        <div className="w-[280px] shrink-0 border-l border-white/[0.05] flex flex-col bg-black/20 backdrop-blur-sm">
+        <div className="w-[280px] shrink-0 border-l border-white/[0.05] flex flex-col bg-well backdrop-blur-sm">
 
           {/* Tabs */}
           <div className="flex border-b border-white/[0.05] shrink-0">

@@ -439,7 +439,7 @@ export function PresentationPage() {
                 <motion.div
                   initial={{ opacity: 0, y: -4, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  className="absolute top-full mt-1 left-0 z-50 p-2 rounded-xl bg-[#1a1a2e] border border-white/10 shadow-2xl grid grid-cols-3 gap-1.5 w-52"
+                  className="absolute top-full mt-1 left-0 z-50 p-2 rounded-xl bg-chrome border border-white/10 shadow-2xl grid grid-cols-3 gap-1.5 w-52"
                 >
                   {BG_PRESETS.map(bg => (
                     <button

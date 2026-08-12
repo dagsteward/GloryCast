@@ -64,7 +64,7 @@ function AddSourceMenu({ cameras, onAddCamera, onAddScreen, onAddFile, onAddPatt
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-20 w-52 rounded-xl bg-[#13131f] border border-white/10 shadow-2xl overflow-hidden">
+          <div className="absolute right-0 top-8 z-20 w-52 rounded-xl bg-chrome border border-white/10 shadow-2xl overflow-hidden">
             <div className="text-[9px] text-white/30 uppercase tracking-widest px-3 pt-2.5 pb-1">Cameras</div>
             {cameras.length === 0 ? (
               <div className="px-3 py-2 text-[10px] text-white/30">No cameras found</div>
@@ -235,7 +235,7 @@ export function SourceLibrary() {
               </div>
 
               {/* Label row */}
-              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-black/40">
+              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-chrome">
                 <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', src.active ? 'bg-emerald-400' : 'bg-white/20')} />
                 <Icon size={9} className={cn(color, 'shrink-0')} />
                 <span className="text-[10px] text-white/65 truncate flex-1">{src.label}</span>

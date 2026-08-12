@@ -44,6 +44,12 @@
      --gc-chrome: bars, headers, side rails, deep panels (one step up) */
   --gc-app: #07070c;
   --gc-chrome: #0a0a12;
+  /* --gc-well: recessed surfaces INSIDE a panel — text wells, textareas,
+     readouts. These were written as bg-black/30, which is correct on a dark
+     canvas but stays black under Light, producing a dark box whose text has
+     been remapped to near-black. A token is the only way one class can be a
+     shadow on dark and a tint on light. */
+  --gc-well: rgba(0, 0, 0, 0.30);
 }
 
 * {
@@ -164,6 +170,10 @@ body,
   background: var(--gc-chrome);
 }
 
+.bg-well {
+  background: var(--gc-well);
+}
+
 /* Cinematic gradient backgrounds */
 .bg-broadcast {
   background: radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
@@ -213,6 +223,9 @@ body,
   --gc-text-muted: rgba(255, 255, 255, 0.32);
   --gc-app: #14141d;
   --gc-chrome: #191922;
+  /* Lighter than dark's well: on Dim's raised canvas a 0.30 shadow reads as a
+     hole rather than a recess. */
+  --gc-well: rgba(0, 0, 0, 0.22);
 }
 
 /* ─── Theme: Light ────────────────────────────────────────────────────────── */
@@ -231,6 +244,9 @@ body,
   --gc-glass-hover: rgba(0, 0, 0, 0.05);
   --gc-app: #eaeaf2;
   --gc-chrome: #ffffff;
+  /* A faint grey tint, not a shadow — on white, any real darkness reads as a
+     bug rather than depth. */
+  --gc-well: rgba(0, 0, 0, 0.045);
 }
 
 .theme-light html,

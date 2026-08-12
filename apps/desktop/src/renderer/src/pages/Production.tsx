@@ -877,18 +877,18 @@ function StagePanel({ graphic, clearGraphic }: { graphic: Graphic | null; clearG
         </div>
 
         {tab === 0 && (
-          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/40 leading-relaxed">
+          <div className="rounded-lg bg-well border border-white/[0.06] p-3 text-[11px] text-white/40 leading-relaxed">
             {graphic ? <>Currently on stage: <span className="text-white/70 font-medium">{graphic.ref}</span></> : 'Nothing queued. Push a detected verse to In-House.'}
           </div>
         )}
         {tab === 1 && (
-          <textarea placeholder="Type stage notes for the speaker…" className="w-full h-20 rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/70 placeholder:text-white/25 outline-none resize-none focus:border-cyan-500/30" />
+          <textarea placeholder="Type stage notes for the speaker…" className="w-full h-20 rounded-lg bg-well border border-white/[0.06] p-3 text-[11px] text-white/70 placeholder:text-white/25 outline-none resize-none focus:border-cyan-500/30" />
         )}
         {tab === 2 && (
-          <textarea placeholder="Type an announcement to show on stage…" className="w-full h-20 rounded-lg bg-black/30 border border-white/[0.06] p-3 text-[11px] text-white/70 placeholder:text-white/25 outline-none resize-none focus:border-cyan-500/30" />
+          <textarea placeholder="Type an announcement to show on stage…" className="w-full h-20 rounded-lg bg-well border border-white/[0.06] p-3 text-[11px] text-white/70 placeholder:text-white/25 outline-none resize-none focus:border-cyan-500/30" />
         )}
         {tab === 3 && (
-          <div className="rounded-lg bg-black/30 border border-white/[0.06] p-3 flex flex-col items-center justify-center">
+          <div className="rounded-lg bg-well border border-white/[0.06] p-3 flex flex-col items-center justify-center">
             <div className={cn('text-3xl font-bold font-mono tabular-nums', secs === 0 ? 'text-red-400' : 'text-white')}>{fmtMS(secs)}</div>
             <div className="text-[10px] text-white/40 mt-1">Sermon Timer</div>
             <div className="flex items-center gap-2 mt-3">

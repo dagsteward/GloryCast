@@ -350,7 +350,7 @@ export function SourceGrid() {
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={closeMenu} />
-              <div className="absolute right-0 bottom-7 z-20 w-60 rounded-xl bg-[#13131f] border border-white/10 shadow-2xl overflow-hidden">
+              <div className="absolute right-0 bottom-7 z-20 w-60 rounded-xl bg-chrome border border-white/10 shadow-2xl overflow-hidden">
                 {connectProto ? (
                   <ConnectForm
                     protocol={connectProto}
@@ -551,7 +551,10 @@ export function SourceGrid() {
               </div>
 
               {/* Label row */}
-              <div className="px-1.5 py-0.5 bg-black/60 border-t border-white/[0.05]">
+              {/* Label strip sits BELOW the thumbnail, so it is chrome rather
+                  than an on-video overlay — it has to follow the theme or it
+                  stays a black bar carrying near-black text under Light. */}
+              <div className="px-1.5 py-0.5 bg-chrome border-t border-white/[0.05]">
                 <span className="text-[8px] text-white/50 truncate block">{src.label}</span>
               </div>
             </div>
@@ -561,7 +564,7 @@ export function SourceGrid() {
         {/* Empty placeholder cells */}
         {Array.from({ length: PAD_CELLS }).map((_, i) => (
           <div key={`empty-${i}`}
-            className="shrink-0 rounded-lg border border-dashed border-white/[0.06] flex flex-col items-center justify-center bg-black/20"
+            className="shrink-0 rounded-lg border border-dashed border-white/[0.06] flex flex-col items-center justify-center bg-well"
             style={{ width: `${CELL_W}px`, minWidth: `${CELL_W}px`, height: `${Math.round(CELL_W * 9 / 16) + 22}px` }}>
             <span className="text-[9px] text-white/12">{tabSources.length + i + 1}</span>
           </div>

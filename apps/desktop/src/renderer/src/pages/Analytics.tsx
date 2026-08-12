@@ -92,7 +92,7 @@ export function AnalyticsPage() {
                 className="appearance-none pl-3 pr-8 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/70 outline-none cursor-pointer"
               >
                 {SERVICES.map((s, i) => (
-                  <option key={i} value={i} className="bg-[#1a1a2e]">{s.label} · {s.date}</option>
+                  <option key={i} value={i} className="bg-chrome">{s.label} · {s.date}</option>
                 ))}
               </select>
               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
