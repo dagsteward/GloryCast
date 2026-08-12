@@ -13,6 +13,7 @@ import {
   type CompositorController,
 } from '../hooks/useCompositor'
 import { useMediaEngine, getStream, type SourceType, type NetworkProtocol, type SourceFit } from '../hooks/useMediaEngine'
+import { getAudioMixer } from '../hooks/useAudioMixer'
 import { useServiceStore } from '../stores/serviceStore'
 import { AsrEngineBadge } from '../components/ai/AsrEngineBadge'
 import { useAppStore } from '../stores/appStore'
@@ -1002,78 +1003,129 @@ function BottomDeck({ streaming, setStreaming }: { streaming: boolean; setStream
 
 // ── Audio mixer (real input devices + master) ──────────────────────────────
 
-interface Chan { name: string; sub: string; level: number; master?: boolean; mute: boolean; solo: boolean }
 
 function AudioMixer() {
-  const microphones = useMediaEngine(s => s.microphones)
-  const permissionState = useMediaEngine(s => s.permissionState)
-  const [chans, setChans] = useState<Chan[]>([])
+  const sources = useMediaEngine(s => s.sources)
+  const [strips, setStrips] = useState<ReturnType<NonNullable<ReturnType<typeof getAudioMixer>>['getChannels']>>([])
+  const [master, setMaster] = useState(1)
+  const [levels, setLevels] = useState<Record<string, number>>({})
+  const raf = useRef(0)
 
-  // Build channels from the machine's real audio inputs + a master bus.
+  // Register any source carrying audio, then mirror the engine's own state.
+  // This strip previously invented its channels from the enumerated device
+  // list and wrote every fader into local React state, so it showed inputs
+  // that were never opened and nothing it did affected the audio at all.
   useEffect(() => {
-    useMediaEngine.getState().enumerateDevices()
+    const mixer = getAudioMixer()
+    if (!mixer) return
+    for (const source of sources) {
+      const stream = getStream(source.id)
+      if (stream && !mixer.hasChannel(source.id)) {
+        mixer.addChannel(source.id, source.label, stream)
+      }
+    }
+    setStrips(mixer.getChannels())
+  }, [sources])
+
+  useEffect(() => {
+    const tick = () => {
+      const mixer = getAudioMixer()
+      if (mixer) {
+        const next: Record<string, number> = {}
+        for (const [id, l] of Object.entries(mixer.readLevels())) next[id] = l.peak
+        next.__master = mixer.readMasterLevels().peak
+        setLevels(next)
+      }
+      raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf.current)
   }, [])
-  useEffect(() => {
-    const mics: Chan[] = microphones.map((m, i) => ({
-      name: m.label?.split('(')[0].trim() || `Input ${i + 1}`,
-      sub: 'Mic', level: 75, mute: false, solo: false,
-    }))
-    setChans([...mics, { name: 'Master', sub: 'Output', level: 85, master: true, mute: false, solo: false }])
-  }, [microphones])
 
-  const set = (i: number, patch: Partial<Chan>) =>
-    setChans(cs => cs.map((c, j) => j === i ? { ...c, ...patch } : c))
-  const dbOf = (lvl: number) => lvl === 0 ? '-∞' : (((lvl - 100) / 100) * 40).toFixed(1)
+  /** A context created before a user gesture is suspended, and silent. */
+  const ensureRunning = () => {
+    const m = getAudioMixer()
+    if (m && !m.running) void Promise.resolve(m.resume()).catch(() => {})
+  }
 
-  const needsAccess = microphones.length === 0
+  const mixer = getAudioMixer()
+  const sync = () => setStrips(getAudioMixer()?.getChannels() ?? [])
+
+  const dbOf = (gain: number) => gain <= 0.001 ? '-∞' : (20 * Math.log10(gain)).toFixed(1)
 
   return (
     <Panel title="Audio Mixer" className="h-[230px]">
-      {needsAccess ? (
-        <div className="h-full flex flex-col items-center justify-center gap-2 text-white/40">
+      {strips.length === 0 ? (
+        <div className="h-full flex flex-col items-center justify-center gap-2 text-white/40 px-4 text-center">
           <Mic size={22} className="opacity-50" />
-          <p className="text-[11px]">{permissionState === 'denied' ? 'Microphone access denied' : 'No audio inputs detected'}</p>
-          <button
-            onClick={async () => { await useMediaEngine.getState().requestPermission(); useMediaEngine.getState().enumerateDevices() }}
-            className="text-[11px] px-3 py-1.5 rounded-lg bg-purple-600/80 hover:bg-purple-600 text-white font-medium"
-          >Grant Microphone Access</button>
+          <p className="text-[11px]">No audio inputs yet</p>
+          <p className="text-[10px] text-white/30 leading-relaxed">
+            Add Source &rarr; Microphone to bring a mic or desk feed into the mix.
+          </p>
         </div>
       ) : (
       <div className="flex gap-1.5 p-3 h-full overflow-x-auto">
-        {chans.map((ch, i) => (
-          <div key={ch.name} className={cn('flex flex-col items-center gap-1 px-1.5 py-1 rounded-lg shrink-0 w-[58px]',
-            ch.master ? 'bg-purple-600/10 border border-purple-500/25' : 'bg-white/[0.02]')}>
-            {/* min-w-0 + w-full are load-bearing: this sits in a
-                `flex-col items-center` parent, where a flex item sizes to its
-                content instead of stretching. Without a width bound the
-                `truncate` below had nothing to truncate against, so long device
-                names ("Microphone Array (Realtek…)") overflowed the 58px strip
-                and overlapped the neighbouring channel. */}
+        {[...strips, null].map((ch, i) => {
+          const isMaster = ch === null
+          const id = ch?.id ?? '__master'
+          const gain = isMaster ? master : ch!.gain
+          const level = levels[id] ?? 0
+          return (
+          <div key={id} className={cn('flex flex-col items-center gap-1 px-1.5 py-1 rounded-lg shrink-0 w-[58px]',
+            isMaster ? 'bg-purple-600/10 border border-purple-500/25' : 'bg-white/[0.02]')}>
             <div className="text-center leading-tight w-full min-w-0">
-              <div title={ch.name} className="text-[10px] font-semibold text-white/80 truncate">{ch.name}</div>
-              <div className="text-[8px] text-white/55 truncate">{ch.sub}</div>
+              <div title={isMaster ? 'Master' : ch!.label} className="text-[10px] font-semibold text-white/80 truncate">
+                {isMaster ? 'Master' : ch!.label}
+              </div>
+              <div className="text-[8px] text-white/55 truncate">{isMaster ? 'Output' : 'Input'}</div>
             </div>
+
+            {/* Pan. Master has no pan — it is the bus everything sums into. */}
             <div className="relative w-7 h-7 rounded-full bg-chrome border border-white/10">
-              <div className="absolute left-1/2 top-1 w-0.5 h-2.5 bg-purple-400 origin-bottom rounded-full" style={{ transform: `translateX(-50%) rotate(${(ch.level / 100) * 270 - 135}deg)` }} />
+              {!isMaster && (
+                <div className="absolute left-1/2 top-1 w-0.5 h-2.5 bg-purple-400 origin-bottom rounded-full"
+                  style={{ transform: `translateX(-50%) rotate(${ch!.pan * 135}deg)` }} />
+              )}
             </div>
+
             <div className="flex items-end gap-1 h-[78px] mt-1">
               <input
-                type="range" min={0} max={100} value={ch.level}
-                onChange={e => set(i, { level: +e.target.value })}
+                type="range" min={0} max={2} step={0.01} value={gain}
+                onChange={e => {
+                  ensureRunning()
+                  const v = +e.target.value
+                  if (isMaster) { mixer?.setMasterGain(v); setMaster(v) }
+                  else { mixer?.setGain(ch!.id, v); sync() }
+                }}
                 className="gc-fader"
-                style={{ writingMode: 'vertical-lr', direction: 'rtl', width: '14px', height: '78px', accentColor: ch.master ? '#a855f7' : '#10b981' } as React.CSSProperties}
+                style={{ writingMode: 'vertical-lr', direction: 'rtl', width: '14px', height: '78px', accentColor: isMaster ? '#a855f7' : '#10b981' } as React.CSSProperties}
               />
-              <div className="w-2 h-full rounded-sm bg-black/40 overflow-hidden flex flex-col-reverse">
-                <div className="w-full bg-gradient-to-t from-emerald-500 via-yellow-400 to-red-500" style={{ height: `${ch.mute ? 0 : ch.level}%` }} />
+              {/* Real signal level, not the fader position — the old meter
+                  mirrored the slider, so it moved whether or not audio flowed. */}
+              <div className="w-2 h-full rounded-sm bg-well overflow-hidden flex flex-col-reverse">
+                <div className="w-full bg-gradient-to-t from-emerald-500 via-yellow-400 to-red-500 transition-[height] duration-75"
+                  style={{ height: `${Math.min(100, level * 100)}%` }} />
               </div>
             </div>
-            <div className="text-[8px] font-mono text-white/60">{dbOf(ch.level)}</div>
+
+            <div className="text-[8px] font-mono text-white/60">{dbOf(gain)}</div>
+
             <div className="flex gap-1">
-              <button onClick={() => set(i, { mute: !ch.mute })} className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch.mute ? 'bg-red-600 text-white' : 'bg-white/[0.06] text-white/60 hover:bg-white/15')}>M</button>
-              <button onClick={() => set(i, { solo: !ch.solo })} className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch.solo ? 'bg-yellow-500 text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/15')}>S</button>
+              {isMaster ? <div className="h-4" /> : (
+                <>
+                  <button
+                    onClick={() => { ensureRunning(); mixer?.setMuted(ch!.id, !ch!.muted); sync() }}
+                    className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch!.muted ? 'bg-red-600 text-white' : 'bg-white/[0.06] text-white/60 hover:bg-white/15')}
+                  >M</button>
+                  <button
+                    onClick={() => { ensureRunning(); mixer?.setSoloed(ch!.id, !ch!.soloed); sync() }}
+                    className={cn('w-4 h-4 rounded-[3px] text-[7px] font-bold', ch!.soloed ? 'bg-yellow-500 text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/15')}
+                  >S</button>
+                </>
+              )}
             </div>
           </div>
-        ))}
+        )})}
       </div>
       )}
     </Panel>
