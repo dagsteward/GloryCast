@@ -16,6 +16,7 @@ import { ModulePlaceholder } from './pages/ModulePlaceholder'
 import { MinimalHomePage } from './pages/MinimalHome'
 import { CommandCenterPage } from './pages/CommandCenter'
 import { ErrorBoundary } from './components/shell/ErrorBoundary'
+import { StageControlPage } from './pages/StageControl'
 
 export function App() {
   return (
@@ -90,12 +91,7 @@ export function App() {
                 description="Playlist-driven media playback with transport controls and auto-advance into program."
               />
             } />
-            <Route path="/stage" element={
-              <ModulePlaceholder
-                title="Stage Display"
-                description="Configure what the platform sees: current and next slide, notes, timers and alerts. Opens on a second monitor."
-              />
-            } />
+            <Route path="/stage" element={<StageControlPage />} />
           </Route>
         </Routes>
       </AnimatePresence>
