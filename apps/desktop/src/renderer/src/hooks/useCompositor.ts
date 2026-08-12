@@ -6,6 +6,7 @@ import {
   createScene,
   type Scene,
   type TransitionKind,
+  type FitMode,
 } from '@glorycast/media-engine'
 import { useMediaEngine, getStream } from './useMediaEngine'
 import { useEngineStore } from '../stores/engineStore'
@@ -102,11 +103,25 @@ function releaseVideo(id: string): void {
 }
 
 /** Build the layer stack for a source, optionally with the graphic on top. */
-function buildScene(id: string, name: string, sourceId: string | null, withGraphic: boolean): Scene {
+function buildScene(
+  id: string, name: string, sourceId: string | null, withGraphic: boolean,
+  fit: FitMode = 'cover',
+): Scene {
   const layers = []
-  if (sourceId) layers.push(createLayer(`${id}-base`, sourceId))
+  // Fit is carried per source rather than fixed at 'cover'. Cover crops
+  // anything that is not 16:9, which silently cut the top and bottom off a
+  // portrait clip with no way to see the whole frame. The compositor has
+  // always supported contain/stretch; nothing passed the value through.
+  if (sourceId) layers.push(createLayer(`${id}-base`, sourceId, { fit }))
+  // The scripture overlay is authored at frame size, so it must never be
+  // refitted — stretching or cropping it would distort the type.
   if (withGraphic) layers.push(createLayer(`${id}-gfx`, GRAPHIC_SOURCE_ID))
   return createScene(id, name, layers)
+}
+
+/** Source fit → compositor fit. 'fill' is the engine's 'stretch'. */
+function toFitMode(fit?: string): FitMode {
+  return fit === 'contain' ? 'contain' : fit === 'fill' ? 'stretch' : 'cover'
 }
 
 export interface CompositorController {
@@ -186,13 +201,16 @@ export function useCompositor(liveGraphic: ProgramGraphic | null): CompositorCon
 
     // A transition in flight owns the program scene; replacing it mid-flight
     // would tear the animation.
+    const programFit = toFitMode(sources.find(s => s.id === programId)?.fit)
+    const previewFit = toFitMode(sources.find(s => s.id === previewId)?.fit)
+
     if (!compositor.isTransitioning) {
       compositor.setProgramScene(
-        buildScene('program', programLabel, programId, Boolean(liveGraphic)),
+        buildScene('program', programLabel, programId, Boolean(liveGraphic), programFit),
       )
     }
     compositor.setPreviewScene(
-      buildScene('preview', previewLabel, previewId, false),
+      buildScene('preview', previewLabel, previewId, false, previewFit),
     )
   }, [programId, previewId, sources, liveGraphic])
 

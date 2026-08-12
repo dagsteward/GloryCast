@@ -387,6 +387,9 @@ function SourcesPanel() {
   const assignToProgram = useMediaEngine(s => s.assignToProgram)
   const removeSource    = useMediaEngine(s => s.removeSource)
   const setSourceFit    = useMediaEngine(s => s.setSourceFit)
+  const toggleMediaPlayback = useMediaEngine(s => s.toggleMediaPlayback)
+  const setMediaVolume  = useMediaEngine(s => s.setMediaVolume)
+  const setMediaMuted   = useMediaEngine(s => s.setMediaMuted)
 
   const [tab, setTab] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -592,9 +595,44 @@ function SourcesPanel() {
                   onClick={e => { e.stopPropagation(); removeSource(s.id) }}
                   className="absolute top-1 left-1 w-4 h-4 rounded bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
                 ><Trash2 size={9} className="text-white/70" /></button>
-                {/* Fit control — images only, since every other source type is
-                    already a 16:9 video frame with nothing to letterbox. */}
-                {s.type === 'image' && (
+                {/* Media transport. Imported clips now start paused and
+                    silent, so the operator cues them rather than having audio
+                    hit the room the instant a file is added. */}
+                {s.type === 'media' && (
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    className="absolute bottom-7 inset-x-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <button
+                      onClick={() => toggleMediaPlayback(s.id)}
+                      title={s.playing ? 'Pause' : 'Play'}
+                      className="w-5 h-5 rounded bg-black/70 flex items-center justify-center shrink-0"
+                    >
+                      {s.playing
+                        ? <Pause size={9} className="text-white/85" />
+                        : <Play size={9} className="text-white/85" />}
+                    </button>
+                    <button
+                      onClick={() => setMediaMuted(s.id, !s.muted)}
+                      title={s.muted ? 'Unmute' : 'Mute'}
+                      className="w-5 h-5 rounded bg-black/70 flex items-center justify-center shrink-0"
+                    >
+                      <span className={cn('text-[7px] font-bold', s.muted ? 'text-red-400' : 'text-white/85')}>
+                        {s.muted ? 'M' : '♪'}
+                      </span>
+                    </button>
+                    <input
+                      type="range" min={0} max={1} step={0.05}
+                      value={s.volume ?? 1}
+                      onChange={e => setMediaVolume(s.id, +e.target.value)}
+                      title="Clip volume"
+                      className="flex-1 h-1 accent-emerald-500 min-w-0"
+                    />
+                  </div>
+                )}
+                {/* Fit control — anything whose native aspect may not be 16:9.
+                    Camera, screen and generated sources are already frame-shaped. */}
+                {(s.type === 'image' || s.type === 'media') && (
                   <button
                     onClick={e => {
                       e.stopPropagation()

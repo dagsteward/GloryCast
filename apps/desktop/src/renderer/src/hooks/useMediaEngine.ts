@@ -61,8 +61,14 @@ export interface MediaSourceMeta {
   protocol?: NetworkProtocol
   url?: string
   status?: 'connecting' | 'live' | 'offline'
-  /** How the source is fitted into the frame. Images only, for now. */
+  /** How the source is fitted into the frame. */
   fit?: SourceFit
+  /** Media clips only — transport and per-clip audio. */
+  playing?: boolean
+  loop?: boolean
+  /** 0..1, applied to the clip's own element before it reaches the mixer. */
+  volume?: number
+  muted?: boolean
 }
 
 export interface AppearanceConfig {
@@ -322,6 +328,11 @@ interface MediaEngineState {
   addColorSource:    (color: string, label?: string) => string
   addImageSource:    (file: File) => string
   setSourceFit:      (id: string, fit: SourceFit) => void
+  toggleMediaPlayback: (id: string) => void
+  seekMedia:         (id: string, seconds: number) => void
+  setMediaVolume:    (id: string, volume: number) => void
+  setMediaMuted:     (id: string, muted: boolean) => void
+  setMediaLoop:      (id: string, loop: boolean) => void
   addCountdownSource:(minutes: number, label?: string) => string
   addClockSource:    () => string
   addTextSource:     (text: string, label?: string) => string
@@ -434,20 +445,68 @@ export const useMediaEngine = create<MediaEngineState>((set, get) => {
       const id = uid('media')
       const url = URL.createObjectURL(file)
       const video = document.createElement('video')
-      video.src = url; video.loop = true; video.muted = false
-      video.play().catch(() => {})
+      video.src = url
+      video.loop = true
+      // Starts paused and silent. Previously this auto-played unmuted, so the
+      // moment a file was imported its audio went straight out of the local
+      // speakers — bypassing the mixer entirely, with no fader, mute or level
+      // that could touch it. The operator cues it, then plays it.
+      video.muted = true
+      video.volume = 1
       _mediaVideos.set(id, video)
+      _fits.set(id, 'contain')
 
       const stream: MediaStream | null = (video as any).captureStream?.(30) ?? null
       if (stream) _streams.set(id, stream)
 
       set(s => ({
         sources: [...s.sources, {
-          id, label: file.name, type: 'media',
+          id, label: file.name.replace(/\.[^.]+$/, ''), type: 'media',
           active: !!stream, hasVideo: true, hasAudio: true,
+          fit: 'contain', playing: false, loop: true, volume: 1, muted: true,
         }],
       }))
       return id
+    },
+
+    // ── Media transport ─────────────────────────────────────────────────────
+    // Imported clips are ordinary <video> elements driving a captured stream,
+    // so transport is just element control. Kept on the engine rather than in
+    // a component so any page (Production, Playback) drives the same clip.
+
+    toggleMediaPlayback: (id) => {
+      const video = _mediaVideos.get(id)
+      if (!video) return
+      const willPlay = video.paused
+      if (willPlay) void video.play().catch(() => {})
+      else video.pause()
+      set(s => ({ sources: s.sources.map(x => x.id === id ? { ...x, playing: willPlay } : x) }))
+    },
+
+    seekMedia: (id, seconds) => {
+      const video = _mediaVideos.get(id)
+      if (video && Number.isFinite(video.duration)) {
+        video.currentTime = Math.max(0, Math.min(video.duration, seconds))
+      }
+    },
+
+    setMediaVolume: (id, volume) => {
+      const video = _mediaVideos.get(id)
+      const v = Math.max(0, Math.min(1, volume))
+      if (video) { video.volume = v; video.muted = v === 0 }
+      set(s => ({ sources: s.sources.map(x => x.id === id ? { ...x, volume: v, muted: v === 0 } : x) }))
+    },
+
+    setMediaMuted: (id, muted) => {
+      const video = _mediaVideos.get(id)
+      if (video) video.muted = muted
+      set(s => ({ sources: s.sources.map(x => x.id === id ? { ...x, muted } : x) }))
+    },
+
+    setMediaLoop: (id, loop) => {
+      const video = _mediaVideos.get(id)
+      if (video) video.loop = loop
+      set(s => ({ sources: s.sources.map(x => x.id === id ? { ...x, loop } : x) }))
     },
 
     // ── addTestPattern ──────────────────────────────────────────────────────
