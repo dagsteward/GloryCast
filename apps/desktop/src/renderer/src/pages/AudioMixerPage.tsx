@@ -96,14 +96,27 @@ export function AudioMixerPage() {
 
   const mixer = getAudioMixer()
 
-  const setGain = (id: string, gain: number) => { mixer?.setGain(id, gain); update(id, { gain }) }
-  const setPan  = (id: string, pan: number)  => { mixer?.setPan(id, pan);  update(id, { pan }) }
+  /**
+   * An AudioContext created before any user gesture starts suspended, and a
+   * suspended context produces silence and dead meters — which looks exactly
+   * like a broken mixer. Every control resumes it first; the browser only
+   * honours that inside a real gesture, so it cannot be done on mount.
+   */
+  const ensureRunning = () => {
+    const m = getAudioMixer()
+    if (!m || m.running) return
+    void Promise.resolve(m.resume()).then(() => setRunning(true)).catch(() => {})
+  }
+
+  const setGain = (id: string, gain: number) => { ensureRunning(); mixer?.setGain(id, gain); update(id, { gain }) }
+  const setPan  = (id: string, pan: number)  => { ensureRunning(); mixer?.setPan(id, pan);  update(id, { pan }) }
   const setEq   = (id: string, band: 'low' | 'mid' | 'high', db: number) => {
+    ensureRunning()
     mixer?.setEq(id, band, db)
     setStrips(s => s.map(x => (x.id === id ? { ...x, eq: { ...x.eq, [band]: db } } : x)))
   }
-  const toggleMute = (id: string, muted: boolean) => { mixer?.setMuted(id, muted); update(id, { muted }) }
-  const toggleSolo = (id: string, soloed: boolean) => { mixer?.setSoloed(id, soloed); update(id, { soloed }) }
+  const toggleMute = (id: string, muted: boolean) => { ensureRunning(); mixer?.setMuted(id, muted); update(id, { muted }) }
+  const toggleSolo = (id: string, soloed: boolean) => { ensureRunning(); mixer?.setSoloed(id, soloed); update(id, { soloed }) }
   const resetStrip = (id: string) => {
     mixer?.resetChannel(id)
     update(id, { pan: 0, eq: { low: 0, mid: 0, high: 0 } })
@@ -223,7 +236,7 @@ export function AudioMixerPage() {
               <div className="flex items-end justify-center gap-2 h-36 mt-auto">
                 <input
                   type="range" min={0} max={2} step={0.01} value={masterGain}
-                  onChange={e => { const v = +e.target.value; mixer?.setMasterGain(v); setMasterGain(v) }}
+                  onChange={e => { ensureRunning(); const v = +e.target.value; mixer?.setMasterGain(v); setMasterGain(v) }}
                   style={{ writingMode: 'vertical-lr', direction: 'rtl', width: '18px', height: '144px' }}
                   className="accent-purple-500"
                 />
